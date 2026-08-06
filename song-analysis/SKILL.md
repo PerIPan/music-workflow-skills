@@ -63,6 +63,25 @@ demucs -n htdemucs_ft -o stems <song.mp3>
 # → stems/htdemucs_ft/<song>/{bass,drums,vocals,other}.wav   (~50s for 2:30 on M3 Pro)
 ```
 
+**CHECK THE CACHE FIRST — `du -sh ~/.cache/torch/hub/checkpoints`.** `htdemucs_ft` is a
+bag of 4 models (~320 MB). If it isn't cached, that command silently downloads for as long
+as your connection takes — measured at ~3 MB/min (≈100 min) on 2026-08-06 — and shows no
+progress at all if you pipe it through `tail`. Don't assume it's cached because you used it
+on a previous song.
+
+**Fast offline fallback (Apple Silicon):** plain htdemucs via MLX, weights already local —
+28 s for a 4-minute track (8.7× realtime):
+
+```bash
+<audio-analysis>/mlx-demucs/.venv/bin/mlx-demucs <song.mp3> -o stems_mlx -v
+```
+
+Call the venv binary **directly**. `uv run mlx-demucs` re-resolves dependencies over the
+network and hangs 10+ min even though the venv is already complete. The MLX port is within
+0.03% of the PyTorch htdemucs reference, so it's a sound basis for chords and bass; re-run
+on `_ft` later only if quality looks marginal. Note its README lists `htdemucs_ft` as a
+supported model, but only plain htdemucs weights ship in `weights/`.
+
 **Quality check:** listen to `bass.wav` alone — piano/guitar bleed means separation
 struggled; try plain `htdemucs` as fallback.
 
@@ -73,8 +92,15 @@ cleanup rules, use the `bass-transcribe` skill — same pipeline. Use **basic-pi
 if the part is polyphonic.
 
 Then aggregate per (bar, half): for each half-bar, total each pitch class's overlapping
-note duration and rank → `analysis/bass_per_bh.json`. Convert pc → letter with **flat
-spelling** (C, D♭, D, E♭ … B♭, B) — matches how guitarists read pop/indie charts.
+note duration and rank → `analysis/bass_per_bh.json`.
+
+**Spell pitch classes from the key signature, not from a fixed table.** Flat spelling
+(C, D♭, D, E♭ … B♭, B) is the right default for flat and neutral keys — it matches how
+guitarists read pop/indie charts. But applying it blindly in a **sharp key produces
+nonsense**: Black Pumas' "Colors" is in three sharps, where the flat table renders the
+tonic as `G♭m` instead of `F♯m`, and the dominant as `D♭7` instead of `C♯7`. Rule: if the
+key signature has sharps, use sharp spelling (C♯, D♯, F♯, G♯, A♯); if flats or none, use
+flats.
 
 **Pitfalls:**
 - Sub-0.5 s detections are noisy; ≥0.7 s sustained notes are usually right.
@@ -118,9 +144,46 @@ Validated: **99% top-1, 100% top-3** on modal-major dream pop.
 2. **Score all 24 triad templates** (12 maj + 12 min, binary root/3rd/5th, sum-normalized)
    by dot product with the cell chroma.
 3. **Bass-root constraint** (only when `bar >= BASS_ENTRY_BAR`): if one bass pitch class
-   has ≥0.5 s sustain in the cell, restrict candidates to the maj+min triads on that root.
-4. **Major-bias**: if top template is minor and same-root major is within margin 0.05,
-   swap. ("Default major; fall back to minor only if it clearly clashes.")
+   has ≥0.5 s sustain in the cell, restrict candidates to the maj+min triads on that root —
+   **but relax it on slash chords** (see below).
+4. **Major-bias**: if top template is minor and same-root major is within margin
+   `MAJOR_BIAS_MARGIN`, swap. ("Default major; fall back to minor only if it clearly
+   clashes.") **The 0.05 default is genre-specific — see the warning below.**
+
+### 3b. Slash-chord relaxation (REQUIRED — validated +17.7 points)
+
+The bass-root constraint assumes the bass note *is* the root. On a slash chord the bass
+plays the 3rd or 5th, and constraining to it forces a guaranteed-wrong answer. Fix:
+
+```python
+allc = sorted(all 24 templates by score, desc)
+con  = [c for c in allc if root_of(c) == bass_pc]
+use_constrained = con and con[0].score >= RELAX_FACTOR * allc[0].score   # 0.85
+```
+
+If the best chord rooted on the bass note scores materially worse than the unconstrained
+best, the bass is a non-root chord tone — drop the constraint and let chroma decide.
+`RELAX_FACTOR = 0.85`; anything ≥0.85 behaves identically, 0.0 = old behaviour.
+
+Measured on Black Pumas "Colors" (C♯7/F, bass on E♯): the old rule mislabelled every
+C♯7 cell as `Fm` (14 misses, a third of all errors). With relaxation the pipeline
+recovers `C♯` with F in the bass unaided — **73.8% → 91.5%** root+quality.
+
+### ⚠️ `MAJOR_BIAS_MARGIN` is the single highest-leverage parameter
+
+The shipped default `0.05` is tuned for **modal-major dream pop**. On an honest-minor
+song it flips the tonic minor to major on nearly every cell. Measured on "Colors"
+(F♯m tonic), same audio, only this parameter changed:
+
+| `MAJOR_BIAS_MARGIN` | root+quality |
+|---|---|
+| 0.05 (shipped default) | **27.4%** |
+| 0.02 | 54.9% |
+| 0.0 | **73.8%** |
+
+A 46-point swing. **Set it to 0 for any song whose tonic is minor**, and only raise it
+for modal-major material. The "99% top-1" figure quoted below was measured on
+modal-major dream pop and does not transfer across genres — re-tune per song.
 5. **Emit top-3** per cell + `beat3_re_attack` flag from onset detection on the same stem
    (corroborating evidence only — noisy).
 

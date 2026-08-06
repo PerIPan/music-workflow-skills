@@ -72,9 +72,16 @@ humanize, generative helpers.
 
 1. **Load with `load_instrument_or_effect`**, not `load_item_to_track` (errors "Unknown
    command"). URIs are HTML-encoded: `query:AudioFx#EQ%20Eight`.
+   ⚠️ **Its success message lies about the device list** — it returns
+   `"Loaded instrument ... Devices on track:"` with the list *empty* even when the load
+   worked. Don't retry on the strength of that; confirm with `get_track_info(track_index)`
+   and read the `devices` array.
 2. **Instruments/presets live under the `sounds` browser category**, not `instruments`
    (returns nothing). Pianos: `query:Sounds#Piano & Keys`; guitars:
    `query:Sounds#Guitar & Plucked`. Use `search_browser(query, category="sounds")`.
+   Search matches **literal preset names**, so instrument nicknames miss: `"Rhodes"`
+   returns nothing, `"Electric Piano"` finds *Electric Piano Daze*. Search the generic
+   name, not the iconic one.
 3. **Chunk note pushes ≤140 notes** per `add_notes_to_clip` (larger has failed silently).
    **Never two pushes to the same clip in one parallel batch** — they race. Sequential
    per clip; parallelize only across different clips.
