@@ -41,6 +41,11 @@ snare_onsets = librosa.onset.onset_detect(onset_envelope=snare_env, sr=sr, hop_l
 
 ## Interpretation
 
+**Precondition: establish the meter first.** Every pattern below is written in 4/4, and
+reading a 4/4 template onto an odd cycle produces a flat, meaningless histogram — see
+SKILL.md Phase 1b and Trap 3. Run `scripts/detect_meter.py` before this step and fold
+onsets onto the cycle length it returns, not onto 4.
+
 Compare onset positions to beat times:
 
 | Detected pattern | Conclusion |
@@ -60,6 +65,8 @@ Compare onset positions to beat times:
 | Punk (4/4) | 1, 3 | 2, 4 + ghost 8ths | Ramones |
 | Hardcore punk (11/4) | 1, 4, 8 | 3, 7, 11 | Custom 11/4 arrangement |
 | **Greek laiko (4/4)** | **every beat** | **& of every beat (1&, 2&, 3&, 4&)** | "Akouo tin Agapi" |
+| Odd meter, grouped | accents mark the split | often none | 7/8 as 3+2+2, 11/8 as 6+5 |
+| Undifferentiated pulse | every pulse, equal weight | equal weight | ritual / devotional drone |
 | Reggae one-drop | 3 only | 3 (rim) | Bob Marley |
 | Disco / Motorik | 1, 2, 3, 4 | 2, 4 | "Stayin' Alive" |
 | Trap | 1, 3 | on 3 or rolled | Modern hip-hop |
@@ -107,3 +114,26 @@ snare_env_raw = np.abs(S[snare_body, :]).sum(axis=0)
 # 3. Cross-check: count snares per detected beat. Consistent positions
 #    (e.g. always 0.3s after each kick) = the pattern, not noise.
 ```
+
+
+## Odd meters
+
+Once `detect_meter.py` returns an odd cycle, the two strongest positions in the folded
+profile mark the internal split — that is the grouping a drummer actually feels, and the
+thing to write in a chart.
+
+Worked example (11/8, measured):
+
+```
+beat    1    2    3    4    5    6  │  7    8    9   10   11
+str    97   13   79   45   61   79  │ 100   27   71   55   88
+```
+
+Peaks at 1 and 7 → **6+5**. The holes at 2 and 8 are the pulses right after each
+downbeat, which is what makes the split audible. Accents then fall in pairs inside each
+group (1·3·5 | 7·9·11), so the feel is duple throughout with one pulse left over.
+
+Write it as `11/8 (6+5)`, not as `11/8` alone — the grouping is what a player needs.
+
+**Do not** describe an odd meter as "no backbeat" and stop there. It has strong beats;
+they just don't land where a 4/4 template looks for them.

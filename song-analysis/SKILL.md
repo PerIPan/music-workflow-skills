@@ -24,37 +24,69 @@ laiko, punk reinterpretations). Works for any song, genre, or key.
 
 | Step | Tool | Why |
 |---|---|---|
-| Tempo / downbeats / bars | **madmom** downbeat tracker | Most accurate at slow & mid tempos |
+| Pulse (beats only) | **madmom** `DBNBeatTrackingProcessor` | No meter assumed — see Phase 1a |
+| Meter / bar length | **`scripts/detect_meter.py`** | Sweeps every cycle 2–25; finds odd meters |
 | Key (melodic mode) | **librosa** chroma + Krumhansl | Signal only — see Trap 2 |
 | Stem separation | **demucs `htdemucs_ft`** (4-stem) | Cleanest bass; NEVER `htdemucs_6s` (bleeds piano/guitar into bass) |
 | Bass → MIDI | **CREPE** (`full` + viterbi) | Monophonic tracker; gives the ROOT, not quality |
 | Polyphonic parts → MIDI | **basic-pitch** | Piano/guitar/pads, double-stops |
 | Chords | **chroma + bass-root + major-bias** | 99% top-1 validated (see Phase 5b) |
-| Lyrics + word timing | **mlx-whisper `large-v3`** (Apple Silicon) or openai-whisper | Word timestamps, hallucination-filterable |
+| Lyrics + word timing | **mlx-whisper `large-v3-turbo`** (Apple Silicon) | Word timestamps, hallucination-filterable |
 | Drum-pattern read | **librosa** band-limited onsets | see reference |
 | Chart output | Python → self-contained **HTML** | see reference |
 
-## Phase 1 — Foundation (downbeats + key)
+## Phase 1 — Foundation (pulse + meter + key)
+
+### 1a. Track the pulse WITHOUT assuming a meter
 
 ```python
-from madmom.features.downbeats import RNNDownBeatProcessor, DBNDownBeatTrackingProcessor
+from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
 import librosa, numpy as np
-from collections import Counter
 
-act = RNNDownBeatProcessor()(audio_path)
-beats = DBNDownBeatTrackingProcessor(beats_per_bar=(3,4), fps=100)(act)  # (time, pos-in-bar)
-beat_times = beats[:,0].tolist()
-beat_positions = beats[:,1].astype(int).tolist()
-downbeat_times = [t for t,p in zip(beat_times, beat_positions) if p == 1]
-bpm = float(60.0 / np.median(np.diff(beat_times)))
+act  = RNNBeatProcessor()(audio_path)
+beat_times = DBNBeatTrackingProcessor(fps=100)(act)   # beats only, NO bar assumption
+beat = float(np.median(np.diff(beat_times)))
+pulse_bpm = 60.0 / beat
 # Key via librosa chroma_cqt mean + Krumhansl correlation → melodic mode ONLY (Trap 2)
 ```
 
-Save as `analysis/foundation.json`: `bpm`, `beats_per_bar`, `beat_times`,
-`downbeat_times`, `num_bars` (= downbeat count), `key`.
+**Never pass `beats_per_bar=(3,4)`.** A constrained candidate list cannot return "none of
+these" — it returns the least-bad of the options you supplied, with full confidence, and
+every downstream number (bar counts, per-bar chord cells, drum histograms) silently
+inherits the error. Get the pulse first; derive the meter in 1b.
+
+### 1b. Derive the meter by sweeping every cycle length
+
+```bash
+scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
+    --foundation analysis/<song>_foundation.json
+```
+
+Phase-folds band-limited kick / snare / hat onsets onto every cycle length from 2 to 25
+pulses and ranks by **accent contrast** = loudest position in the cycle ÷ quietest.
+Run it AFTER Phase 2 so it has a drums stem; a full mix works but reads muddier.
+
+Reading the output:
+
+| Output | Means | Do |
+|---|---|---|
+| Consensus, confidence HIGH | Real cycle, clear of unrelated periods | Use it. Odd winner → odd meter |
+| Consensus on a multiple of 4, confidence LOW | Plain 4/4 with an *n*-bar pattern | Report 4/4 + phrase length, not an *n*-beat bar |
+| INCONCLUSIVE | Bands disagree, or no usable accent | Report the ambiguity. Do NOT pick one |
+| Winner is prime (7, 11, 13) | Cannot be a phrase of anything smaller | Almost certainly the meter |
+| Winner = 2× a strong period | The half is the bar, the double is two bars | Take the fundamental |
+
+**The two strongest positions in an odd cycle mark its internal split.** An 11 with peaks
+at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7.
+
+Save as `analysis/foundation.json`: `pulse_bpm`, `beat_times`, `beats_per_bar` (from 1b,
+**not** from madmom), `downbeat_times` (every *n*-th beat from the winning phase),
+`num_bars`, `key`.
 
 **Sanity checks:** BPM stable (no jumps); watch half/double-time on slow songs (60–90
-BPM) — count along the audio; downbeat spacing roughly constant.
+BPM) — count along the audio; cross-check `num_bars` against
+`duration ÷ (beats_per_bar × beat)`. A large mismatch means rubato, a wrong tempo octave,
+or a wrong meter.
 
 ## Phase 2 — Stems
 
@@ -192,8 +224,19 @@ Why it works: bass-MIDI gives root but not quality; chroma gives quality but con
 70–90%; the combination hits 99%. Errors concentrate in pre-bass-entry bars,
 sustained-organ smear, and extended chords (expand templates with 7th/sus for jazz/R&B).
 
-Per-song tuning: `MAJOR_BIAS_MARGIN` (raise for modal-major genres, lower/zero for
-honest-minor folk), `BASS_ENTRY_BAR`, template set.
+**Default `MAJOR_BIAS_MARGIN` to 0, and never gate it on the detected key.** The key
+estimator reports the *melody's* mode, so a modal song pedalling on a major triad returns
+"major" — which switches on the very bias that destroys its minor chords. Measured: gating
+on a "B major" key estimate set the bias to 0.05 and flipped **120 of 169 cells** from
+minor to major on one song, turning a i–♭III–v–♭VI minor loop into a phantom major one.
+
+Always run bias 0 and bias 0.05 and **report the flip count**. A large count means the
+cells are near-ties and the quality call is genuinely uncertain — say so rather than
+picking silently. To settle major vs minor on one chord, compare chroma energy of the
+major third against the minor third directly: G♯ at 14.4% vs G♮ at 4.7% closes the
+question in a single number.
+
+Per-song tuning: `BASS_ENTRY_BAR`, template set.
 
 ## Phases 6–9 — Chart
 
@@ -227,6 +270,24 @@ the maj-3rd fights the melody's ♭3, go minor. Never propagate the key label to
 quality. Also: many modal songs pivot between relative major and minor — label the key as
 a pair (`E♭ / Cm`) when both centers appear.
 
+### Trap 3 — The meter you never tested for looks like no meter at all
+
+Folding onsets onto the wrong period does not produce a *low* score, it produces a
+**flat** one. An 11-beat cycle folded onto 2, 3, 4 or 6 smears to near-perfect uniformity,
+because 11 shares no factor with any of them.
+
+Measured on a real 11/8 track: accent contrast was **1.03–1.24** across periods 2/3/4/6 —
+read at the time as "this song has no metric accent." Swept properly, period 11 scored
+**7.5 on the kick and 9.4 on the snare**, with nothing unrelated above 2.3.
+
+**Uniform contrast at every period you tested is not a finding. It means you have not
+tested the right period yet.** Widen the sweep before concluding anything, and never
+report "no time signature" on the strength of a narrow sweep.
+
+Corollary: assume odd meters are live. 5/4, 7/8 and 11/8 are ordinary in Balkan,
+Byzantine, prog and much devotional music — exactly the material this pipeline gets used
+on. Coprime blindness makes them invisible to a 4/4-shaped test.
+
 **Verify with a player.** All automated signals are wrong ~30% of the time on
 modal-mixture songs. A musician who knows the song is ground truth — plan a verification
 pass before declaring the chart done.
@@ -242,12 +303,22 @@ pass before declaring the chart done.
 7. Each chart correction touches ~3 places (chord dict, row layout, cascading lyrics).
 8. Mirror parallel sections visually.
 9. Section-boundary pickups: overlay in the same cell, don't displace.
+10. Never hand an analyzer a candidate list it can't say "none of these" to — a
+    constrained `beats_per_bar` and a key-gated `MAJOR_BIAS_MARGIN` both produced
+    confident wrong answers that survived every downstream check.
+11. Ask the user to count. One "I count 11 then 1" outranked three analysis passes.
 
 ## Local environment (this machine)
 
 - Tooling root: `/Users/peripan/dev/abletonAI/audio-analysis/`
-- `.venv-bp/bin/python` — madmom, librosa, basic-pitch, crepe, pretty_midi, mlx-whisper
-  (verified 2026-07-16). `.venv-demucs/bin/python` — demucs.
+- `.venv-bp/bin/python` — madmom, librosa, basic-pitch, crepe, pretty_midi.
+  `.venv-demucs/bin/python` — demucs.
+- **Whisper is NOT in any audio-analysis venv.** It lives at
+  `/Users/peripan/mlx-openai-whisper/bin/python`, and only
+  `mlx-community/whisper-large-v3-turbo` is cached — naming `whisper-large-v3-mlx`
+  triggers a ~3 GB download.
+- `mlx-demucs/.venv/bin/mlx-demucs` — for any multi-song batch. `htdemucs_ft` on CPU runs
+  >10 min per track even with weights cached; MLX did 5 songs in 3.5 min.
 - Existing helpers: `analyze_chords.py` (Phase 5b), `analyze_chord_onsets.py`,
   `scripts/whisper_vocals.py` (Phase 4), chart generators `gen_*.py` per song folder.
 - Source docs (read-only): `WORKFLOW-song-analysis.md` in the tooling root.
