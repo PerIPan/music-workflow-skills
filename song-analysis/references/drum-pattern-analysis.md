@@ -122,7 +122,7 @@ Once `detect_meter.py` returns an odd cycle, the two strongest positions in the 
 profile mark the internal split — that is the grouping a drummer actually feels, and the
 thing to write in a chart.
 
-Worked example (11/8, measured):
+Worked example — an 11/8 profile:
 
 ```
 beat    1    2    3    4    5    6  │  7    8    9   10   11

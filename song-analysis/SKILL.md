@@ -65,8 +65,8 @@ scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
 
 **Always pass `--bass` and `--other` too.** Plenty of songs have no drum kit, or a
 percussion part that is an undifferentiated pulse carrying no accent — and the cycle is
-still there, articulated by the bass and the harmony instead. Measured on one drone track:
-drum bands gave contrast 1.18 (nothing), the bass gave 3.96 and found the cycle. The
+still there, articulated by the bass and the harmony instead. The signature is a drum
+contrast stuck near 1.2 while the bass reaches 3–4 and resolves the cycle cleanly. The
 script falls back to these stems automatically when fewer than two drum bands decide.
 
 Phase-folds band-limited kick / snare / hat onsets onto every cycle length from 2 to 25
@@ -242,8 +242,8 @@ sustained-organ smear, and extended chords (expand templates with 7th/sus for ja
 **Default `MAJOR_BIAS_MARGIN` to 0, and never gate it on the detected key.** The key
 estimator reports the *melody's* mode, so a modal song pedalling on a major triad returns
 "major" — which switches on the very bias that destroys its minor chords. Measured: gating
-on a "B major" key estimate set the bias to 0.05 and flipped **120 of 169 cells** from
-minor to major on one song, turning a i–♭III–v–♭VI minor loop into a phantom major one.
+on a major key estimate is enough to flip **the majority of cells in a track** (70%+),
+turning a minor loop into a phantom major one.
 
 Always run bias 0 and bias 0.05 and **report the flip count**. A large count means the
 cells are near-ties and the quality call is genuinely uncertain — say so rather than
@@ -291,9 +291,16 @@ Folding onsets onto the wrong period does not produce a *low* score, it produces
 **flat** one. An 11-beat cycle folded onto 2, 3, 4 or 6 smears to near-perfect uniformity,
 because 11 shares no factor with any of them.
 
-Measured on a real 11/8 track: accent contrast was **1.03–1.24** across periods 2/3/4/6 —
-read at the time as "this song has no metric accent." Swept properly, period 11 scored
-**7.5 on the kick and 9.4 on the snare**, with nothing unrelated above 2.3.
+Calibration — read your own contrast numbers against this:
+
+| Top contrast in the sweep | Reading |
+|---|---|
+| 1.0–1.3 at *every* period tested | Wrong periods tested, or genuinely no accent. Widen the sweep |
+| 1.5–2.5 | Weak or ambiguous — report it as such |
+| 3–10 at one period, ≤2.5 at every unrelated one | A real cycle. Trust it |
+
+A coprime cycle read through the wrong fold lands squarely in the first row: uniform, not
+low.
 
 **Uniform contrast at every period you tested is not a finding. It means you have not
 tested the right period yet.** Widen the sweep before concluding anything, and never
@@ -321,7 +328,8 @@ pass before declaring the chart done.
 10. Never hand an analyzer a candidate list it can't say "none of these" to — a
     constrained `beats_per_bar` and a key-gated `MAJOR_BIAS_MARGIN` both produced
     confident wrong answers that survived every downstream check.
-11. Ask the user to count. One "I count 11 then 1" outranked three analysis passes.
+11. Ask the user to count. A player's count settles in seconds what a sweep can only
+    rank, and it outranks the sweep.
 12. A static upper voicing over a moving bass reads as several chords to a triad matcher.
     Before reporting a progression, pool chroma **per bar in the instrument's own
     register** (high-pass away the bass) and check whether the set actually changes — a

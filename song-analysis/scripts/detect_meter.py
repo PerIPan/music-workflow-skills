@@ -23,8 +23,8 @@ import librosa
 
 BANDS = {"kick": (30, 110), "snare": (180, 450), "hat": (6000, 11000)}
 # Fallback when the drum bands say nothing: many songs have no kit at all, but the
-# bass and the harmonic part still articulate the cycle. Measured on a drone track
-# whose "drums" stem was not a kit — drums gave contrast 1.18, the bass gave 3.96.
+# bass and the harmonic part still articulate the cycle. Typical signature is a drum
+# contrast stuck near 1.2 while the bass reaches 3-4 and resolves the cycle.
 FALLBACK = {"bass": (30, 250), "harmonic": (80, 2000)}
 
 
