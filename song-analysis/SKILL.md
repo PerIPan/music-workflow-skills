@@ -59,8 +59,15 @@ inherits the error. Get the pulse first; derive the meter in 1b.
 
 ```bash
 scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
+    --bass stems/<song>/bass.wav --other stems/<song>/other.wav \
     --foundation analysis/<song>_foundation.json
 ```
+
+**Always pass `--bass` and `--other` too.** Plenty of songs have no drum kit, or a
+percussion part that is an undifferentiated pulse carrying no accent — and the cycle is
+still there, articulated by the bass and the harmony instead. Measured on one drone track:
+drum bands gave contrast 1.18 (nothing), the bass gave 3.96 and found the cycle. The
+script falls back to these stems automatically when fewer than two drum bands decide.
 
 Phase-folds band-limited kick / snare / hat onsets onto every cycle length from 2 to 25
 pulses and ranks by **accent contrast** = loudest position in the cycle ÷ quietest.
@@ -75,6 +82,14 @@ Reading the output:
 | INCONCLUSIVE | Bands disagree, or no usable accent | Report the ambiguity. Do NOT pick one |
 | Winner is prime (7, 11, 13) | Cannot be a phrase of anything smaller | Almost certainly the meter |
 | Winner = 2× a strong period | The half is the bar, the double is two bars | Take the fundamental |
+
+**The sweep can only find cycles on the pulse grid you hand it.** If the tempogram peaks
+at twice the tracked pulse, the beat tracker is reading half-time: re-run on the doubled
+grid, because a cycle of 8 there shows up as 4 here. Check the tempo octave *before*
+trusting any cycle length.
+
+**A song with no percussion at all cannot be metered this way** — say so and move on
+rather than straining the harmonic stem for an answer it does not contain.
 
 **The two strongest positions in an odd cycle mark its internal split.** An 11 with peaks
 at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7.
@@ -307,6 +322,13 @@ pass before declaring the chart done.
     constrained `beats_per_bar` and a key-gated `MAJOR_BIAS_MARGIN` both produced
     confident wrong answers that survived every downstream check.
 11. Ask the user to count. One "I count 11 then 1" outranked three analysis passes.
+12. A static upper voicing over a moving bass reads as several chords to a triad matcher.
+    Before reporting a progression, pool chroma **per bar in the instrument's own
+    register** (high-pass away the bass) and check whether the set actually changes — a
+    drone with a walking bass is one chord, not four.
+13. `basic-pitch` duplicates notes at exact octaves and invents low-register content that
+    the stem does not contain. Floor the output at the instrument's real range (C3 for a
+    piano out of `other.wav`) before pushing anything to Ableton.
 
 ## Local environment (this machine)
 

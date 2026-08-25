@@ -22,6 +22,10 @@ import numpy as np
 import librosa
 
 BANDS = {"kick": (30, 110), "snare": (180, 450), "hat": (6000, 11000)}
+# Fallback when the drum bands say nothing: many songs have no kit at all, but the
+# bass and the harmonic part still articulate the cycle. Measured on a drone track
+# whose "drums" stem was not a kit — drums gave contrast 1.18, the bass gave 3.96.
+FALLBACK = {"bass": (30, 250), "harmonic": (80, 2000)}
 
 
 def pulse_grid(audio_path, foundation=None):
@@ -111,8 +115,8 @@ def verdict(rows, label):
     elif fund % 4 == 0 and fund > 4:
         print(f"    NOTE: {fund} divides by 4 — this may be a PHRASE "
               f"({fund//4} bars of 4/4) rather than one bar.")
-        print(f"      Check whether {fund//2} and 4 also score well, and whether the "
-              f"profile is one busy bar plus quiet ones (= phrase, not meter).")
+        print(f"      Check whether {fund//2} and {max(fund//4,2)} also score well, and "
+              f"whether the profile is one busy bar plus quiet ones (= phrase, not meter).")
     return (fund, margin)
 
 
@@ -120,6 +124,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("audio")
     ap.add_argument("--drums", help="separated drums stem (strongly preferred)")
+    ap.add_argument("--bass", help="bass stem — used automatically if the drums say nothing")
+    ap.add_argument("--other", help="harmonic stem — same fallback role as --bass")
     ap.add_argument("--max", type=int, default=25, help="longest cycle to test")
     ap.add_argument("--foundation", help="reuse a beat grid from foundation.json")
     ap.add_argument("--json", help="write full sweep here")
@@ -145,6 +151,19 @@ def main():
         if f: fundamentals.append(f[0]); margins.append(f[1])
         else: weak += 1
 
+    # --- fallback: no kit, or a kit that carries no accent
+    if len(fundamentals) < 2 and (a.bass or a.other):
+        print("\n  drum bands inconclusive — falling back to bass / harmonic stems")
+        print("  (a song with no kit still articulates its cycle through pitch)")
+        for nm, path in (("bass", a.bass), ("harmonic", a.other)):
+            if not path: continue
+            yy, _ = librosa.load(path, sr=22050, mono=True)
+            lo, hi = FALLBACK[nm]
+            ps = band_pulse_strength(yy, sr, bt, beat, lo, hi)
+            f = verdict(sweep(ps, a.max), nm)
+            if f: fundamentals.append(f[0]); margins.append(f[1])
+            else: weak += 1
+
     print("\n" + "=" * 62)
     agree = max(set(fundamentals), key=fundamentals.count) if fundamentals else None
     n = fundamentals.count(agree) if agree else 0
@@ -166,6 +185,11 @@ def main():
         print("  Do NOT pick a meter from this. Common causes: the percussion is an")
         print("  undifferentiated pulse, there is no kit at all, or the part is")
         print("  played rubato. Report the ambiguity rather than resolving it.")
+        if not (a.bass or a.other):
+            print("  TRY FIRST: re-run with --bass and --other before giving up.")
+        print("  ALSO CHECK THE TEMPO OCTAVE: this sweep can only find cycles on the")
+        print("  pulse grid it was given. If the tempogram peaks at 2x the tracked")
+        print("  pulse, re-run on that grid — a cycle of 8 there is 4 here.")
     print("NEXT: ask the user to count along with the kick. Their ear is ground truth")
     print("      and settles in seconds what this sweep can only rank.")
     print("=" * 62)
