@@ -62,13 +62,13 @@ Compare onset positions to beat times:
 | Pattern | Kick | Snare | Example |
 |---|---|---|---|
 | Rock backbeat (4/4) | 1, 3 | 2, 4 | Standard rock |
-| Punk (4/4) | 1, 3 | 2, 4 + ghost 8ths | Ramones |
+| Punk (4/4) | 1, 3 | 2, 4 + ghost 8ths | Classic fast punk |
 | Hardcore punk (11/4) | 1, 4, 8 | 3, 7, 11 | Custom 11/4 arrangement |
-| **Greek laiko (4/4)** | **every beat** | **& of every beat (1&, 2&, 3&, 4&)** | "Akouo tin Agapi" |
+| **Greek laiko (4/4)** | **every beat** | **& of every beat (1&, 2&, 3&, 4&)** | Rolling laiko dance track |
 | Odd meter, grouped | accents mark the split | often none | 7/8 as 3+2+2, 11/8 as 6+5 |
 | Undifferentiated pulse | every pulse, equal weight | equal weight | ritual / devotional drone |
-| Reggae one-drop | 3 only | 3 (rim) | Bob Marley |
-| Disco / Motorik | 1, 2, 3, 4 | 2, 4 | "Stayin' Alive" |
+| Reggae one-drop | 3 only | 3 (rim) | Roots reggae |
+| Disco / Motorik | 1, 2, 3, 4 | 2, 4 | Four-on-the-floor disco |
 | Trap | 1, 3 | on 3 or rolled | Modern hip-hop |
 
 Genre notes:
@@ -90,7 +90,7 @@ Genre notes:
 
 ## Lessons learned (snare undercount case)
 
-Validated on "Akouo tin Agapi" (~99 BPM): first pass returned **4 snare hits in 60 s**;
+Measured on a Greek laiko track (~99 BPM): first pass returned **4 snare hits in 60 s**;
 listening confirmed snare on **every offbeat** (~120 hits/60 s) — 97% missed. Causes:
 
 1. **`delta=0.5` too strict** for snare. Use `delta=0.15–0.25`.

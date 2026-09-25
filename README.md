@@ -5,7 +5,7 @@ Claude Code skills for a full music-production workflow: analyze real recordings
 build or reinterpret songs in Ableton Live over MCP.
 
 Derived from working `WORKFLOW-*.md` guides validated on real song projects
-(Mitski "A Pearl", Agni Parthene 11/4 punk reinterpretation, Greek laiko analysis, and others).
+(dream-pop analysis, an 11/4 punk reinterpretation of a Byzantine hymn, Greek laiko analysis, and others).
 
 ## Skills
 

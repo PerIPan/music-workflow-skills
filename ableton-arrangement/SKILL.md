@@ -6,7 +6,7 @@ description: Use when composing or arranging a full song in Ableton Live via MCP
 # Ableton Arrangement — composing full songs via MCP
 
 Song-agnostic patterns for fleshing a song idea (MIDI or chart in hand) into a full
-arrangement. Validated on a hardcore-punk 11/4 reinterpretation of Agni Parthene;
+arrangement. Validated on a hardcore-punk 11/4 reinterpretation of a Byzantine hymn;
 applies to any genre/key/meter. Connection mechanics and device gotchas live in the
 `ableton-mcp` skill; analysis of existing recordings in `song-analysis`.
 
@@ -73,7 +73,7 @@ contrasts create the song's narrative.
 | **WALK/CLIMB** (scale walk between roots) | Transitions | varies | varies |
 
 **Don't DRIVE every bar** — constant 8ths sound like a sequencer. Mix patterns; ~50–100
-notes total per *song section*, not hundreds. Punk reference (Ramones-style, bars 37–40):
+notes total per *song section*, not hundreds. Punk reference (four consecutive bars):
 DRIVE → BREATH+SLIDE → STAC_AIR → ACCENT.
 
 ## Drum conventions per meter

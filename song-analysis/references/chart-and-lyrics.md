@@ -45,8 +45,8 @@ pickup syllable visually attached to the wrong chord causes them to play that ch
 the wrong feel.
 
 ```
-Sung:    [A♭ bar...] "Ev'ry night, baby,"|[E♭ bar] "that's where I"  [A♭ bar] "go"
-Chart:   [A♭]                              |[E♭]    "Ev'ry night, baby, / that's where I"  [A♭] "go"
+Sung:    [A♭ bar...] "Pickup words here,"|[E♭ bar] "and the phrase"  [A♭ bar] "ends"
+Chart:   [A♭]                              |[E♭]    "Pickup words here, / and the phrase"  [A♭] "ends"
                                             ^ phrase anchored at the E♭ change
 ```
 
@@ -74,7 +74,7 @@ whole sequence.
 
 When a phrase from the *next* section is sung inside the *current* section's last filled
 cell, render it as a colored overlay in the same cell (e.g. the bridge's last A♭ box
-contains both the bridge's "you fill" and the chorus link's "It's just that"). Don't
+contains both the bridge's closing words and the chorus link's pickup words). Don't
 displace the current section's lyric; co-habit.
 
 CSS pattern:
@@ -101,7 +101,7 @@ Patterns that recur across songs:
 - **"Anchor at the chord, not the syllable."** Pickups are visual artifacts; the chart's
   job is to show *where to play the chord change*. Rule 1.
 - **"Chord and lyric must live on the same row."** When moving a phrase to a new row, move
-  the chord progression that supports it. If "It's just that I fell" lives on the chorus
+  the chord progression that supports it. If the chorus's opening line lives on the chorus
   row, the chorus's E♭→F lift must live there too — even if it's the section's first bar.
 - **"Verses with `(2-chord bar | 1-chord bar)` pairs."** Many songs use
   antecedent-consequent verse patterns: the first bar walks two chords (e.g. `i → ♭VI`)

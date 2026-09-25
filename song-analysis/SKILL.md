@@ -5,7 +5,7 @@ description: Use when analyzing a song recording — extracting tempo/downbeats/
 
 # Song Analysis — recording → bars, chords, lyrics, chart
 
-Song-agnostic pipeline, validated over many real projects (Mitski "A Pearl", Greek
+Song-agnostic pipeline, validated over many real projects (dream pop, Greek
 laiko, punk reinterpretations). Works for any song, genre, or key.
 
 **References (read on demand):**
@@ -144,8 +144,8 @@ note duration and rank → `analysis/bass_per_bh.json`.
 **Spell pitch classes from the key signature, not from a fixed table.** Flat spelling
 (C, D♭, D, E♭ … B♭, B) is the right default for flat and neutral keys — it matches how
 guitarists read pop/indie charts. But applying it blindly in a **sharp key produces
-nonsense**: Black Pumas' "Colors" is in three sharps, where the flat table renders the
-tonic as `G♭m` instead of `F♯m`, and the dominant as `D♭7` instead of `C♯7`. Rule: if the
+nonsense**: in F♯ minor (three sharps) the flat table renders the tonic as `G♭m`
+instead of `F♯m`, and the dominant as `D♭7` instead of `C♯7`. Rule: if the
 key signature has sharps, use sharp spelling (C♯, D♯, F♯, G♯, A♯); if flats or none, use
 flats.
 
@@ -212,15 +212,16 @@ If the best chord rooted on the bass note scores materially worse than the uncon
 best, the bass is a non-root chord tone — drop the constraint and let chroma decide.
 `RELAX_FACTOR = 0.85`; anything ≥0.85 behaves identically, 0.0 = old behaviour.
 
-Measured on Black Pumas "Colors" (C♯7/F, bass on E♯): the old rule mislabelled every
-C♯7 cell as `Fm` (14 misses, a third of all errors). With relaxation the pipeline
-recovers `C♯` with F in the bass unaided — **73.8% → 91.5%** root+quality.
+Measured on a minor-tonic track built around a dominant-7th slash chord (C♯7/F, bass on
+the 3rd, E♯): the old rule mislabelled every C♯7 cell as `Fm`, the minor triad on the
+bass note (14 misses, a third of all errors). With relaxation the pipeline recovers
+`C♯` with F in the bass unaided — **73.8% → 91.5%** root+quality.
 
 ### ⚠️ `MAJOR_BIAS_MARGIN` is the single highest-leverage parameter
 
 The shipped default `0.05` is tuned for **modal-major dream pop**. On an honest-minor
-song it flips the tonic minor to major on nearly every cell. Measured on "Colors"
-(F♯m tonic), same audio, only this parameter changed:
+song it flips the tonic minor to major on nearly every cell. Measured on the same
+minor-tonic track (F♯m tonic), same audio, only this parameter changed:
 
 | `MAJOR_BIAS_MARGIN` | root+quality |
 |---|---|
@@ -262,9 +263,7 @@ Read `references/chart-and-lyrics.md` before building the chart. Core invariants
 - **Lyric phrases anchor at the chord they resolve INTO** (Rule 1 — the big one).
 - Output: single self-contained HTML, print-friendly, harmonic-notes block at bottom.
 
-## Hard rules — the two cardinal traps
-
-Both appeared in production and required a working musician to correct.
+## Hard rules — the cardinal traps
 
 ### Trap 1 — Bass walk ≠ slash chord
 
