@@ -12,7 +12,8 @@ laiko, punk reinterpretations). Works for any song, genre, or key.
 - `references/environment-setup.md` — first-time venv install + per-song folder layout
 - `references/chart-and-lyrics.md` — chart structure, the 6 lyric-placement rules, HTML output
 - `references/drum-pattern-analysis.md` — kick/snare pattern reading from the drums stem
-- `references/modal-theory.md` — power-chord shorthand, mode tables, Byzantine ≠ Phrygian
+- `references/modal-theory.md` — power-chord shorthand, the mode test, Byzantine ≠ Phrygian
+- `references/lead-and-keys-extraction.md` — isolated guitar/piano lines via `htdemucs_6s`
 
 ## Inputs
 
@@ -26,13 +27,13 @@ laiko, punk reinterpretations). Works for any song, genre, or key.
 |---|---|---|
 | Pulse (beats only) | **madmom** `DBNBeatTrackingProcessor` | No meter assumed — see Phase 1a |
 | Meter / bar length | **`scripts/detect_meter.py`** | Sweeps every cycle 2–25; finds odd meters |
-| Key (melodic mode) | **librosa** chroma + Krumhansl | Signal only — see Trap 2 |
-| Stem separation | **demucs `htdemucs_ft`** (4-stem) | Cleanest bass; NEVER `htdemucs_6s` (bleeds piano/guitar into bass) |
+| Key (melodic mode) | **madmom** `CNNKeyRecognitionProcessor` + bass-pedal check | 24-key probabilities; signal only — see Trap 2 |
+| Stem separation | **demucs `htdemucs_ft`** (4-stem) | Cleanest bass. `htdemucs_6s` only for an isolated guitar/piano stem — never for bass |
 | Bass → MIDI | **librosa pyin** (40–220 Hz) | Monophonic tracker; gives the ROOT, not quality. Not CREPE — see Phase 3 |
 | Polyphonic parts → MIDI | **basic-pitch** | Piano/guitar/pads, double-stops |
 | Chords | **chroma + bass-root** (+ slash relax) | See Phase 5b |
 | Lyrics + word timing | **mlx-whisper `large-v3-turbo`** (Apple Silicon) | Word timestamps, hallucination-filterable |
-| Drum-pattern read | **librosa** band-limited onsets | see reference |
+| Drum-pattern read | **librosa** band-limited onsets (ADTOF optional) | see reference |
 | Chart output | Python → self-contained **HTML** | see reference |
 
 ## Phase 1 — Foundation (pulse + meter + key)
@@ -47,8 +48,19 @@ act  = RNNBeatProcessor()(audio_path)
 beat_times = DBNBeatTrackingProcessor(fps=100)(act)   # beats only, NO bar assumption
 beat = float(np.median(np.diff(beat_times)))
 pulse_bpm = 60.0 / beat
-# Key via librosa chroma_cqt mean + Krumhansl correlation → melodic mode ONLY (Trap 2)
+
+from madmom.features.key import CNNKeyRecognitionProcessor, KEY_LABELS
+probs = CNNKeyRecognitionProcessor()(audio_path)[0]    # 24 key probabilities
+key_top2 = [(KEY_LABELS[i], round(float(probs[i]), 2)) for i in np.argsort(probs)[::-1][:2]]
 ```
+
+**Key: report the top two with probabilities, then check the bass pedal.** The CNN beats
+chroma + Krumhansl by ~20 MIREX points and fixes relative-major/minor flips, but it knows
+only 24 major/minor keys and its probability is not a confidence on modal or drone
+material (a Lydian track came out as the wrong key at p = 0.59). So also take the pitch
+class the bass sustains longest (duration-weighted, after Phase 3): if it disagrees with
+the key estimate, trust the pedal as the tonic and name the mode with the mode test in
+`references/modal-theory.md`. Either way this is the *melody's* key — Trap 2.
 
 **Never pass `beats_per_bar=(3,4)`.** A constrained candidate list cannot return "none of
 these" — it returns the least-bad of the options you supplied, with full confidence, and
@@ -103,15 +115,18 @@ at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7.
 Save as `analysis/foundation.json`: `pulse_bpm`, `beat_times`, `beats_per_bar` (from 1b,
 **not** from madmom), `pulse_unit` (4 if the pulse is a quarter note, 8 if an eighth),
 `grouping` (the internal split, e.g. `[6, 5]`; `[2, 2]` for 4/4), `downbeat_times` (every
-*n*-th beat from the winning phase), `num_bars`, `key`.
+*n*-th beat from the winning phase), `num_bars`, `key` (top two + probabilities),
+`bar_bpm` (per bar: 60 / median inter-beat interval in that bar, same unit as the pulse) and
+`tempo_drift_pct` ((max − min) / median of `bar_bpm`).
 
 **Cells.** Everything downstream (bass, chords, lyrics, chart) is keyed by `(bar, cell)`,
 one cell per group in `grouping`: 4/4 → 2+2 (the familiar half-bars), 3/4 → one cell,
 6/8 → 3+3, 11/8 as 6+5 → two unequal cells. Never split an odd bar at its midpoint — that
 lands mid-pulse.
 
-**Sanity checks:** BPM stable (no jumps); watch half/double-time on slow songs (60–90
-BPM) — count along the audio; cross-check `num_bars` against
+**Sanity checks:** read `bar_bpm`, not just one BPM — played music drifts, and above
+~±3% a single tempo misplaces notes by the end (`ableton-mcp` → "Timing"). Watch
+half/double-time on slow songs (60–90 BPM) — count along the audio; cross-check `num_bars` against
 `duration ÷ (beats_per_bar × beat)`. A large mismatch means rubato, a wrong tempo octave,
 or a wrong meter.
 
@@ -176,17 +191,57 @@ flats.
 
 ## Phase 4 — Lyric timing (Whisper on the VOCALS STEM)
 
-Whisper is far more accurate on isolated vocals than the full mix.
+Whisper is far more accurate on isolated vocals than the full mix. **Gate it on where
+the stem is actually sung** instead of fiddling with `no_speech_threshold`: an RMS gate
+on the vocal stem, fed in as `clip_timestamps`, cut long-form lyric WER 22.9% → 20.7% and
+removed most filler hallucinations on separated vocals (arXiv 2506.15514).
 
-Settings that work: model `mlx-community/whisper-large-v3-turbo` (Apple Silicon; the
-non-turbo `large-v3` is a separate ~3 GB download for no gain on lyrics);
-`word_timestamps=True`; `condition_on_previous_text=False` (avoids hallucination drift);
-post-filter known hallucinations ("Thank you.", "Blah Blah", ".") and 3+ identical repeats.
+```python
+import librosa, numpy as np, mlx.core as mx, mlx_whisper
+from mlx_whisper.transcribe import ModelHolder
 
-`no_speech_threshold=0.8` suppresses hallucinated text in silence **but also drops real,
-sparse vocals** — it can return nothing for a track that has singing. If the result looks
-empty or thin, re-run at `0.45` and diff: what only the second pass finds is either sparse
-real text or hallucination, and the vocal stem's RMS in that span tells you which.
+REPO = "mlx-community/whisper-large-v3-turbo"      # large-v3 = extra ~3 GB, no gain
+y, sr = librosa.load(VOCALS, sr=16000, mono=True)
+rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+t = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=512)
+sung = rms > 0.1 * rms.max()                       # the gate
+
+segs, start = [], None                             # sung runs → [start, end]
+for ti, on in zip(t, sung):
+    if on and start is None: start = ti
+    if not on and start is not None: segs.append([start, ti]); start = None
+if start is not None: segs.append([start, t[-1]])
+merged = []                                        # merge gaps < 1 s, cap at 30 s
+for s0, e0 in segs:
+    if merged and s0 - merged[-1][1] < 1.0 and e0 - merged[-1][0] <= 30: merged[-1][1] = e0
+    else: merged.append([s0, e0])
+dur = len(y) / sr
+clips = [(max(0, s0 - 0.4), min(dur, e0 + 0.4)) for s0, e0 in merged]  # pad: onsets lead
+
+# turbo's curated word-alignment heads — mlx-whisper never sets them itself
+ModelHolder.get_model(REPO, mx.float16).set_alignment_heads(
+    b"ABzY8j^C+e0{>%RARaKHP%t(lGR*)0g!tONPyhe`")
+res = mlx_whisper.transcribe(
+    VOCALS, path_or_hf_repo=REPO, word_timestamps=True,
+    clip_timestamps=[x for c in clips for x in c],
+    condition_on_previous_text=False,              # avoids hallucination drift
+    hallucination_silence_threshold=2.0)           # add language="en"/"el"/… if known
+
+def in_gate(w):                                    # keep a word if ANY of its span is sung
+    m = (t >= w["start"]) & (t <= w["end"])
+    return bool(m.any() and sung[m].any())
+words = [w for seg in res["segments"] for w in seg.get("words", []) if in_gate(w)]
+```
+
+Judge a word by its **whole span**, not its start — Whisper often starts a sung word
+before the voice is audible, and filtering on start time drops real words. Force
+`language=` when the auto-detect wobbles (chant, non-English). Then post-filter known
+hallucinations ("Thank you.", "Blah Blah", ".") and 3+ identical repeats. On a
+three-minute stem the gated run took ~4 min on an M3 including model load.
+
+`no_speech_threshold=0.8` (if you skip the gate) also drops real, sparse vocals — it can
+return nothing for a track that has singing. The curated alignment heads are what
+openai-whisper uses for this model; their effect on sung vocals hasn't been A/B'd.
 
 Map each word's start time to (bar, beat):
 
@@ -335,7 +390,8 @@ pass before declaring the chart done.
 
 ## Lessons learned
 
-1. `htdemucs_ft`, never `htdemucs_6s` — 6-stem bleeds piano/guitar into bass MIDI.
+1. `htdemucs_ft` for bass, never `htdemucs_6s` — 6-stem bleeds piano/guitar into bass
+   MIDI. `htdemucs_6s` is for isolating guitar or piano only.
 2. Trust the user's ear over any analyzer disagreement.
 3. Chart bar = audio bar.
 4. Whisper timing is precise; musical placement is not strict timing (Rule 1).

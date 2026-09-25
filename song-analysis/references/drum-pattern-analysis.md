@@ -39,6 +39,26 @@ snare_onsets = librosa.onset.onset_detect(onset_envelope=snare_env, sr=sr, hop_l
                                           units="time", delta=0.15, wait=2)
 ```
 
+## Optional: per-hit labels with ADTOF
+
+When you need labelled hits — a kick/snare/hat table, or drum MIDI — **ADTOF** (Frame_RNN,
+`adtofAll`) classifies each onset as kick / snare / hi-hat / tom / cymbal (MIDI
+35/38/42/47/49). It is the published state of the art for drum transcription (MDB F ≈
+0.87–0.89) and runs in seconds on CPU. It is **not** the default, because on this
+pipeline's material:
+
+- **It is level-sensitive: peak-normalise the stem first** (to ~−1 dBFS). A drums stem
+  peaking at −5 dBFS returned 15 hits for a whole song; normalised, 181.
+- **On non-kit percussion, trust its timing, not its labels.** On a frame-drum/hand-
+  percussion backbeat it reported only kick and tom — the hits sat on consistent beat
+  positions, but no "snare" existed to report.
+- It is much weaker on drum machines (RBMA F ≈ 0.63–0.65).
+- The documented snare-undercount case below has not been re-run with it.
+
+Setup: `pip install git+https://github.com/MZehren/ADTOF` in its own venv (TensorFlow);
+with TF ≥ 2.16 install `tf_keras` and set `TF_USE_LEGACY_KERAS=1` before importing.
+Its code and weights are CC BY-NC-SA — install it, never copy it into a repo.
+
 ## Interpretation
 
 **Precondition: establish the meter first.** Every pattern below is written in 4/4, and

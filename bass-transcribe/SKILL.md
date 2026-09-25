@@ -83,6 +83,27 @@ t, freq, conf, _ = crepe.predict(y16, 16000, model_capacity='full', viterbi=True
 `full` + viterbi is deterministic on CPU. Expect more notes than pyin, including breaths
 and glottal onsets — post-filter sub-100 ms notes.
 
+## 2c. Octave cross-check (when a line looks wrong, or on drone material)
+
+Run a second tracker, band-limited to the same range, and flag where the two disagree by
+more than 50 cents — don't auto-correct; listen to those spots.
+
+```python
+import crepe.core as cc
+y16, _ = librosa.load(AUDIO, sr=16000, mono=True)
+act = cc.get_activation(y16, 16000, model_capacity='tiny', step_size=10, verbose=0)
+cents = np.linspace(0, 7180, 360) + 1997.3794084376191           # CREPE bin → cents
+act[:, (cents < 1200 * np.log2(40 / 10)) | (cents > 1200 * np.log2(220 / 10))] = 0
+f_crepe = 10 * 2 ** (cc.to_viterbi_cents(act) / 1200)            # band-limited Viterbi
+t_crepe = np.arange(len(f_crepe)) * 0.01
+# compare with pyin's f0 on t_crepe where both are voiced; flag |Δ| > 50 cents
+```
+
+Zeroing the out-of-band bins *before* Viterbi keeps the decoder inside the bass range
+(filtering afterwards can't). `tiny` is ~17× faster than `full`. On separated bass stems
+this flagged ~4% of frames on a busy line — almost all exact-octave splits — and ~9% on a
+drone, where the disagreements also include harmonic locks, not just octaves.
+
 ## 3. Cleanup rules
 
 - **Drop blips** < 80 ms (tracker flicker, fret noise).
@@ -98,10 +119,12 @@ and glottal onsets — post-filter sub-100 ms notes.
 ## 4. Outputs
 
 1. **`.mid` file** — the pipeline's direct product; drag into any DAW.
-2. **Live clip** via the `ableton-mcp` skill: convert seconds → beats
-   (`beats = sec * BPM / 60`), size the clip in **BARS** (round up to 1/2/4/8…), push
-   with `add_notes_to_clip` in ≤140-note chunks (never two pushes to the same clip in
-   parallel).
+2. **Live clip** via the `ableton-mcp` skill: convert seconds → Live beats. For a take
+   recorded to Live's click, `beats = sec × BPM / 60` is exact; for a take played free or
+   a song stem, map through the beat grid (`ableton-mcp` → "Timing: seconds → Live
+   beats"). Size the clip in **BARS** (round up to 1/2/4/8…), push over the raw-TCP bulk
+   path (or `add_notes_to_clip` in ≤140-note chunks — never two pushes to the same clip
+   in parallel).
 3. **Tab / chart** — bass tab or bar chart generation: chart craft lives in the
    `song-analysis` skill (`references/chart-and-lyrics.md`); pitch-class per half-bar
    aggregation as in its Phase 3.

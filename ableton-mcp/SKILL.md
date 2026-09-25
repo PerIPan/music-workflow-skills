@@ -11,6 +11,7 @@ Claude drives a live Ableton Set through the AbletonMCP server (jpoindexter fork
 **References (read on demand):**
 - `references/setup-install.md` — first-time install (Remote Script + server + verify)
 - `references/troubleshooting.md` — connection failures, tool errors
+- `references/als-xml.md` — reading Arrangement content from the saved `.als` (MCP can't)
 
 For arrangement *craft* (section design, bass/drum patterns, FX chains) use the
 `ableton-arrangement` skill; this skill is the mechanics and the gotchas.
@@ -82,14 +83,18 @@ humanize, generative helpers.
    Search matches **literal preset names**, so instrument nicknames miss: `"Rhodes"`
    returns nothing, `"Electric Piano"` finds *Electric Piano Daze*. Search the generic
    name, not the iconic one.
-3. **Chunk note pushes ≤140 notes** per `add_notes_to_clip` (larger has failed silently).
-   **Never two pushes to the same clip in one parallel batch** — they race. Sequential
-   per clip; parallelize only across different clips.
+3. **Chunk note pushes ≤140 notes** per `add_notes_to_clip` MCP call (larger has failed
+   silently). **Never two pushes to the same clip in one parallel batch** — they race.
+   Sequential per clip; parallelize only across different clips. For hundreds of notes use
+   the raw-TCP bulk path below (300 per chunk works there).
 4. **Reading a big clip can exceed the response token limit.** Generate notes in a
    script → save JSON → push from that. Don't round-trip 500 notes through a read.
 5. **`remove_notes(from_time, time_span, from_pitch, pitch_span)` for surgical edits** —
    prefer over `remove_all_notes`. **Always assume the user hand-edited the clip** —
-   read or remove-by-range rather than wiping.
+   read or remove-by-range rather than wiping. **`remove_all_notes` only clears 0 → clip
+   length**: notes at negative times or past the end survive. To truly clear a clip:
+   `remove_all_notes`, then `remove_notes(from_time=-16, time_span=16 + length + 16)`,
+   then confirm with `get_clip_notes`.
 6. **Effects load at the END of the chain.** Build in order or reorder with
    `move_device_left/right`.
 7. **EQ Eight freq is normalized 0–1:** `value = log10(freq/20) / 3` (1 kHz ≈ 0.566,
@@ -103,6 +108,19 @@ humanize, generative helpers.
    (`get_session_info`) or append at the end (`index = -1`).
 10. **Humanize in layers** — `humanize_clip_velocity(~0.08)` + `humanize_clip_timing(~0.04)`;
     apply twice if it still sounds programmed.
+11. **Toggles don't tell you the prior state.** `toggle_arrangement_record`,
+    `toggle_session_record`, `toggle_device` flip whatever is there. Parse the reply
+    ("… is now on/off"); if it's not the state you wanted, toggle again and re-check. Read
+    first where a getter exists (`get_metronome_state`).
+12. **Warn before arming a track that has Arrangement content.** With arrangement record
+    on, Live draws red overdub indicators on those clips — they look like deletion but are
+    only a preview. Say so before arming, then confirm with `get_arrangement_length` and
+    `get_track_info` that nothing changed. If the user reports "content deleted", verify
+    with reads before anyone reaches for undo or reload (unsaved Session work is at risk).
+13. **Read clip names before inferring harmony.** Users label clips with the chords
+    ("verse – Am Em x 4"). The label gives *which* chords; the note timing gives *bars per
+    chord* (the label doesn't — "x 4" can mean 2 bars each). Arrangement clips aren't
+    visible over MCP: read the `.als` (`references/als-xml.md`).
 
 ## Session-jam patterns (song-agnostic)
 
@@ -113,8 +131,10 @@ humanize, generative helpers.
 - **A muted NOTES track** whose clip *names* carry tips/roadmaps.
 - **Count-in without Follow Actions:** click-only clip + 1–2-bar launch quantization;
   fire the groove during the count bar, it drops on the next downbeat.
-- **Odd meters via clip length, not global signature:** 5/4 = 5-beat clips, 7/8 =
-  3.5-beat clips — same length for every clip in the scene **including the click**.
+- **Odd meters:** set the Set's signature over raw TCP (`set_signature`, below) so the
+  grid and bar numbers match — one meter per Set. For scenes in different meters, use
+  clip length instead: 5/4 = 5-beat clips, 7/8 = 3.5-beat clips — the same length for
+  every clip in the scene **including the click**.
 - **Whole song in one scene (through-composed):** full-song-length clips per track with
   an energy arc; **leave a track empty for a live player** (e.g. no bass clip for a
   bassist).
@@ -123,9 +143,61 @@ humanize, generative helpers.
 
 ### Working method that scales
 
-Generate notes in a script → save JSON → push in ≤140-note chunks (deterministic,
-reviewable, revertible). High-pass synths/keys so a live bass owns the lows. Test one
+Generate notes in a script → save JSON → push over the raw-TCP bulk path (or ≤140-note
+MCP chunks) — deterministic, reviewable, revertible. High-pass synths/keys so a live bass owns the lows. Test one
 section, get direction, then propagate.
+
+## Timing: seconds → Live beats
+
+Live's tempo and clip positions count **quarter notes**, whatever the meter.
+- `set_tempo(pulse_bpm × 4 / pulse_unit)` — with an eighth-note pulse (`pulse_unit` 8),
+  halve it; passing the eighth-note pulse straight in doubles the tempo.
+- One bar = `beats_per_bar × 4 / pulse_unit` Live beats (4/4 → 4, 7/8 → 3.5, 11/8 → 5.5).
+- **Map analysed audio through the real beat grid, not one BPM.** Played music drifts
+  (150–171 BPM inside one song has been measured), so `beats = sec × BPM / 60` accumulates
+  error over minutes. For a take recorded to Live's click, the fixed formula is exact.
+
+```python
+bt = np.asarray(beat_times); n = np.arange(len(bt))           # from foundation.json
+def to_live_beats(t, pulse_unit):
+    p = np.interp(t, bt, n)                                    # fractional pulse index
+    p = np.where(t < bt[0], (t - bt[0]) / (bt[1] - bt[0]), p)  # extrapolate the ends
+    p = np.where(t > bt[-1], n[-1] + (t - bt[-1]) / (bt[-1] - bt[-2]), p)
+    return np.round(p * 4 / pulse_unit * 4) / 4                # Live beats, 16th grid
+```
+
+- **Pre-roll:** anything before the first tracked beat comes out negative, and notes at
+  negative clip times never play. Shift the whole part by one bar and lengthen the clip.
+- If `foundation.json` reports tempo drift above ~±3%, don't collapse to one BPM: build
+  on the warped grid above and tell the user the Live tempo is the median.
+
+## Bulk path: raw TCP on port 9877
+
+The Remote Script takes one JSON command per connection on `127.0.0.1:9877` —
+`{"type": <command>, "params": {…}}` — the same commands the MCP tools wrap, plus a few
+with no MCP tool. Use it for bulk writes (it keeps thousands of notes out of the
+conversation); use MCP tools for reads and verification. Sequential per clip.
+
+```python
+import json, socket
+def live(cmd, **params):
+    with socket.create_connection(("127.0.0.1", 9877), timeout=60) as s:
+        s.sendall(json.dumps({"type": cmd, "params": params}).encode())
+        buf = b""
+        while chunk := s.recv(65536):
+            buf += chunk
+            try: return json.loads(buf)
+            except json.JSONDecodeError: continue
+        raise ConnectionError(f"incomplete reply: {buf[:200]!r}")
+
+for i in range(0, len(notes), 300):
+    r = live("add_notes_to_clip", track_index=T, clip_index=C, notes=notes[i:i + 300])
+    assert r.get("status") == "success", r          # stop on the first failed chunk
+```
+
+**Time signature** (no MCP tool): `live("set_signature", numerator=11, denominator=8)`,
+then read it back with `live("get_signature")`. It sets one global meter for the Set —
+the Live Object Model has no API for meter changes along the Arrangement.
 
 ## Local environment (this machine)
 
