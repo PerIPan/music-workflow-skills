@@ -1,9 +1,32 @@
-# Chord proposal — the method behind `scripts/chord_proposal.py`
+# Chord proposal — lv-chordia first, the triad method as cross-check
 
 Read this when tuning Phase 5b, when its output looks wrong, or before quoting its
 accuracy to anyone.
 
-## Method (per cell, on the `other.wav` stem)
+## Benchmark (2026-09-26, per cell, mir_eval)
+
+| Song — truth | Metric | Triad method | lv-chordia (mix) |
+|---|---|---|---|
+| Minor-tonic soul, V7 in 1st inversion — Chordify | root / maj-min | 94.5 / 91.5% | 96.3 / 96.3% |
+| | 7ths / with inversions | 79.3 / 79.3% | 84.8 / 92.1% |
+| Modal-major dream pop — Chordify, time-aligned | root / maj-min | 97.1 / 76.0% | 100 / 95.2% |
+| Static Emaj7 over an E pedal, 11/8 — a player's ear | 7ths | 0% (30% root) | 75% |
+
+Chordify is itself automatic, so the first two rows measure agreement, not truth; the
+third row is a player's verification. A bar-level Chordify chart drifted a bar against
+the beat grid (83 vs 84.5 BPM) and scored both methods ~45% — **score against
+time-aligned references**, not bar numbers from another tool's grid.
+
+lv-chordia (ISMIR 2019, `pip install lv-chordia==1.1.0`, MIT) runs the `submission`
+vocabulary by default. Its bundled model is the paper's no-re-weighting variant — the
+weakest on rare qualities — and the `full` vocabulary (add9, ♯11) is untested upstream:
+don't read extensions beyond 7ths off it. The accuracy figures in its README are not in
+the paper. It reported the static-Emaj7 track's intro and outro as F♯7/F♯maj7 — either an
+error or a real change; ask the player.
+
+## The triad method (`scripts/chord_proposal.py`) — cross-check
+
+### Method (per cell, on the `other.wav` stem)
 
 1. **Chroma** — `librosa.feature.chroma_cqt` averaged over the cell.
 2. **Score all 24 triads** (12 major + 12 minor, binary root/3rd/5th, sum-normalised) by
@@ -24,7 +47,7 @@ accuracy to anyone.
 6. **Major-bias diff pass** — re-scored with a 0.05 bias toward the same-root major; the
    script reports how many cells would flip.
 
-## `MAJOR_BIAS`: default 0, never gated on the key
+### `MAJOR_BIAS`: default 0, never gated on the key
 
 It is the single highest-leverage parameter. Same minor-tonic track (F♯m tonic), same
 audio, only this changed:
@@ -50,7 +73,7 @@ one chord, compare the chroma energy of the major third against the minor third 
 (G♯ 14.4% vs G♮ 4.7% closes the question in one number), or run the mode test in
 `modal-theory.md`.
 
-## Where it fails
+### Where it fails
 
 - **A static voicing over a moving bass** reads as several chords. The script's near-ties
   and flip count light up; confirm with register-pooled chroma (Trap 1 in the skill).

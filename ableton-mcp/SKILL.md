@@ -202,7 +202,8 @@ above. Standard library only; tested against a mock socket
 (`tests/test_push_notes.py`).
 
 **Time signature** (no MCP tool): `live("set_signature", numerator=11, denominator=8)`,
-then read it back with `live("get_signature")`. It sets one global meter for the Set —
+then read it back with `live("get_signature")` (verified on Live 12.4). It sets one global
+meter for the Set —
 the Live Object Model has no API for meter changes along the Arrangement.
 
 ## Local environment (this machine)

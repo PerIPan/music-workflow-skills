@@ -2,7 +2,7 @@
 
 Read this only when the toolchain isn't installed yet, or a venv broke.
 
-Four virtualenvs, one per role — madmom pins old NumPy/Cython, demucs wants an old torch,
+Five virtualenvs, one per role — madmom pins old NumPy/Cython, demucs wants an old torch,
 ADTOF and basic-pitch fight over TensorFlow, and Whisper wants a new Python. Keep them
 apart. Versions below are the ones this skill's scripts were verified with; pin them, or
 new installs drift (librosa 1.0 removed APIs these snippets use; torch ≥ 2.9 +
@@ -30,7 +30,12 @@ python3 -m venv ~/mlx-openai-whisper
 ~/mlx-openai-whisper/bin/pip install 'mlx-whisper==0.4.3' 'librosa==0.11.0'
 # first use downloads mlx-community/whisper-large-v3-turbo (~1.5 GB)
 
-# (4) Optional — ADTOF drum transcription   (Python 3.10)
+# (4) Chords — lv-chordia   (Python 3.11; ~30 s install, weights bundled)
+uv venv --python 3.11 .venv-lvchordia
+uv pip install --python .venv-lvchordia/bin/python 'lv-chordia==1.1.0' \
+    'librosa==0.11.0' 'torch==2.11.0' 'soundfile==0.13.1'   # librosa 1.0 is untested with it
+
+# (5) Optional — ADTOF drum transcription   (Python 3.10)
 python3.10 -m venv .venv-adtof && source .venv-adtof/bin/activate
 pip install 'numpy==1.26.4' 'tensorflow==2.21.0' 'tf_keras==2.21.0' 'pretty_midi==0.2.11'
 pip install git+https://github.com/MZehren/ADTOF.git     # CC BY-NC-SA: install, never vendor

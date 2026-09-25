@@ -38,7 +38,8 @@ skill (written against `~`) — everything else is generic.
 
 Scripts:
 - `song-analysis/scripts/detect_meter.py` — meter by sweeping every cycle 2–25 (odd meters)
-- `song-analysis/scripts/chord_proposal.py` — per-cell chords, slash relaxation, flip count
+- `song-analysis/scripts/lv_chords.py` — chords with 7ths/inversions (lv-chordia) on the bar/cell grid
+- `song-analysis/scripts/chord_proposal.py` — triad cross-check: slash relaxation, flip count
 - `song-analysis/scripts/whisper_gated.py` — lyric word timing gated on the sung parts
 - `ableton-mcp/scripts/push_notes.py` — bulk note push over Live's TCP socket
 

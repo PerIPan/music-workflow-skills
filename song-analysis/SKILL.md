@@ -33,12 +33,13 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 | Stems | **demucs `htdemucs_ft`** `-d mps` | `htdemucs_6s` only to isolate guitar/piano — never for bass |
 | Bass → MIDI | **pyin** (`bass-transcribe` skill) | Root line, not chord quality. Not CREPE |
 | Polyphonic parts → MIDI | **basic-pitch** | Floor at the instrument's range |
-| Chords | **`scripts/chord_proposal.py`** | Chroma + bass root + slash relaxation |
+| Chords | **`scripts/lv_chords.py`** (lv-chordia), cross-checked by `scripts/chord_proposal.py` | 7ths + inversions; triad method flags disagreements |
 | Lyrics + word timing | **`scripts/whisper_gated.py`** | mlx-whisper turbo, gated on the sung parts |
 | Drum-pattern read | librosa band onsets (ADTOF optional) | see reference |
 | Chart | Python → self-contained **HTML** | see reference |
 
-Scripts run with the analysis venv (`<venv>/bin/python`); Whisper has its own venv.
+Scripts run with the analysis venv (`<venv>/bin/python`); Whisper and lv-chordia have
+their own venvs.
 
 ## Phase 1 — Foundation (pulse + key, then meter)
 
@@ -165,20 +166,26 @@ Section boundaries = where each labelled section's first line lands. Don't trust
 section detection (±1 bar off around bridges and outros); lyrics + word timing are far
 more reliable.
 
-## Phase 5b — Chord proposal
+## Phase 5b — Chords (lv-chordia, cross-checked)
 
 ```bash
 <venv>/bin/python scripts/chord_proposal.py --other stems/<song>/other.wav \
     --bass stems/<song>/bass.wav --foundation analysis/foundation.json \
-    --bass-entry-bar <N> --out analysis/chord_proposal.json
+    --bass-entry-bar <N> --out analysis/chord_proposal.json          # triad cross-check
+<lv-venv>/bin/python scripts/lv_chords.py <song.mp3> --foundation analysis/foundation.json \
+    --compare analysis/chord_proposal.json --out analysis/chords_lv.json
 ```
 
-Per cell: 24 triad templates scored on the harmonic stem's chroma, preferring the bass
-note as root **unless that costs more than 15%** (then the bass is the 3rd or 5th — a
-slash chord; this step alone took one track from 73.8% to 91.5%). Major bias is **0** and
-never gated on the key; the script reports how many cells a 0.05 bias would flip, plus
-each cell's margin over the runner-up. Many flips or near-ties = the quality call is
-uncertain: say so. Method, measurements, failure modes: `references/chord-proposal.md`.
+**lv-chordia is the primary reading.** It names 7ths and inversions, which the triad
+method cannot, and beat it on all three benchmark songs — maj/min 91.5 → 96.3% and
+inversions 79.3 → 92.1% on one, 76 → 95% on another, and on a player-verified static
+Emaj7 it said `E:maj7` for 75% of cells where the triad method managed 0%. Run it on the
+**full mix** (a bass+other sum scored lower). ~5–12 s per song on CPU.
+
+**The triad method is the cross-check.** `chord_proposal.py` (bass-root constraint with
+slash relaxation, major bias **0**, flip count, per-cell margin) is independent evidence;
+`--compare` lists cells where the two disagree on the root — check those by ear with the
+Trap 1 tests. Details, benchmark and failure modes: `references/chord-proposal.md`.
 
 ## Phases 6–9 — Chart
 
