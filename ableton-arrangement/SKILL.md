@@ -1,6 +1,6 @@
 ---
 name: ableton-arrangement
-description: Use when composing or arranging a full song in Ableton Live via MCP — section design, track layout, bass pattern palettes (DRIVE/BREATH/SLIDE…), drum conventions per meter, lead guitar techniques, effects chains, dynamics and humanization. For reinterpreting songs in a new genre or building an arrangement from a chart or MIDI.
+description: Use when composing or arranging a song in Ableton Live — section design, track layout, bass and drum patterns in any meter, lead lines, effects chains, dynamics — including reinterpreting a song in a new genre or building from a chart or MIDI.
 ---
 
 # Ableton Arrangement — composing full songs via MCP
@@ -146,6 +146,6 @@ parallel) → EQ Eight (HP 40 Hz, −2 dB @ 250, +3.5 dB @ 1k presence, +2 dB @ 
 
 ## Local environment (this machine)
 
-- Note generators live in `/Users/peripan/dev/abletonAI/audio-analysis/` (`gen_*.py`,
+- Note generators live in `~/dev/abletonAI/audio-analysis/` (`gen_*.py`,
   `build_*.py`) — bass palettes, drum fills, lead techniques implemented there.
 - Source doc (read-only): `WORKFLOW-ableton-arrangement.md` in the same folder.

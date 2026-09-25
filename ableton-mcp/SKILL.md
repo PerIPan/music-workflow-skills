@@ -1,6 +1,6 @@
 ---
 name: ableton-mcp
-description: Use when controlling Ableton Live through the AbletonMCP server — creating tracks/clips/scenes, pushing MIDI notes, loading instruments or effects, setting device parameters, mixing, automation, or debugging the Live connection. Contains the hard limits and gotchas (note chunking, browser URIs, EQ Eight formulas, index shifts).
+description: Use when controlling Ableton Live through the AbletonMCP server — tracks, clips, scenes, MIDI notes, instruments and effects, device parameters, mixing, automation, tempo or time signature — or when the Live connection or a tool call fails.
 ---
 
 # Ableton Live via MCP
@@ -195,15 +195,21 @@ for i in range(0, len(notes), 300):
     assert r.get("status") == "success", r          # stop on the first failed chunk
 ```
 
+**`scripts/push_notes.py`** does all of this: chunked push that exits non-zero on the
+first failed chunk, `--clear` (including out-of-bounds notes), `--signature 11/8` with
+read-back, and `--from-seconds foundation.json` for the beat-grid mapping and pre-roll
+above. Standard library only; tested against a mock socket
+(`tests/test_push_notes.py`).
+
 **Time signature** (no MCP tool): `live("set_signature", numerator=11, denominator=8)`,
 then read it back with `live("get_signature")`. It sets one global meter for the Set —
 the Live Object Model has no API for meter changes along the Arrangement.
 
 ## Local environment (this machine)
 
-- `.mcp.json` already configured in `/Users/peripan/dev/abletonAI/` (server `ableton` via
+- `.mcp.json` already configured in `~/dev/abletonAI/` (server `ableton` via
   `uvx --from <that dir>/ableton-mcp --with mcp[cli]==1.4.1 ableton-mcp`); Remote Script
   from the same checkout installed.
 - Recording session output to audio: empty-slot record needs a UI click — use Resample
   workflow instead.
-- Source doc (read-only): `/Users/peripan/dev/abletonAI/audio-analysis/WORKFLOW-ableton-mcp.md`.
+- Source doc (read-only): `~/dev/abletonAI/audio-analysis/WORKFLOW-ableton-mcp.md`.

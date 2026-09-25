@@ -123,7 +123,9 @@ def verdict(rows, label):
     print(f"    VERDICT: cycle of {fund} pulses"
           + (f" (winner {P} = {P//fund}x)" if P != fund else "")
           + f", {margin:.1f}x clear of the nearest unrelated period.")
-    prof = next(r for r in rows if r["period"] == fund)["profile"]
+    frow = next(r for r in rows if r["period"] == fund)
+    prof = frow["profile"]
+    downbeat = (frow["phase"] + int(np.argmax(prof))) % fund   # pulse index of beat 1
     mx = max(prof)
     print(f"    accent profile: " + " ".join(f"{int(v/mx*99):3d}" for v in prof))
     strong = [i + 1 for i, v in enumerate(prof) if v > np.mean(prof)]
@@ -136,7 +138,7 @@ def verdict(rows, label):
               f"({fund//4} bars of 4/4) rather than one bar.")
         print(f"      Check whether {fund//2} and {max(fund//4,2)} also score well, and "
               f"whether the profile is one busy bar plus quiet ones (= phrase, not meter).")
-    return (fund, margin, strong)
+    return (fund, margin, strong, downbeat)
 
 
 def main():
@@ -166,8 +168,8 @@ def main():
         nonlocal weak
         out[name] = rows
         f = verdict(rows, name)
-        verdicts[name] = (dict(cycle=f[0], margin=round(f[1], 2), accented=f[2])
-                          if f else None)
+        verdicts[name] = (dict(cycle=f[0], margin=round(f[1], 2), accented=f[2],
+                               downbeat_pulse=f[3]) if f else None)
         if f: fundamentals.append(f[0]); margins.append(f[1])
         else: weak += 1
 
@@ -194,8 +196,12 @@ def main():
         print(f"  cycle = {agree} x {beat*1000:.0f} ms = {agree*beat:.2f} s")
         print(f"  -> ~{(bt[-1]-bt[0])/(agree*beat):.0f} bars across the tracked span")
         mg = float(np.median(margins))
+        best = max((v for v in verdicts.values() if v and v["cycle"] == agree),
+                   key=lambda v: v["margin"])
         consensus = dict(cycle=agree, bands_agree=n, bands_tested=tested,
-                         margin=round(mg, 2), confidence="HIGH" if mg >= 2.0 else "LOW")
+                         margin=round(mg, 2), confidence="HIGH" if mg >= 2.0 else "LOW",
+                         downbeat_pulse=best["downbeat_pulse"])
+        print(f"  downbeat: pulse {best['downbeat_pulse']} of the grid (strongest position)")
         if mg >= 2.0:
             print(f"  confidence HIGH: {mg:.1f}x clear of unrelated periods.")
         else:

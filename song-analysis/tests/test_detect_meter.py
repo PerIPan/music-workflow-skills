@@ -58,10 +58,11 @@ def main():
                            check=True, capture_output=True)
             cons = json.load(open(out))["consensus"]
             got = cons["cycle"] if cons else None
-            ok = got in want
+            ok = got in want and (cons is None or cons["downbeat_pulse"] == 0)  # beat 1 = pulse 0
             fails += not ok
             print(f"{'PASS' if ok else 'FAIL'}  {name:14s} want {sorted(want, key=str)}  got {got}"
-                  + (f"  ({cons['confidence']}, {cons['margin']}x)" if cons else ""))
+                  + (f"  ({cons['confidence']}, {cons['margin']}x, downbeat pulse "
+                     f"{cons['downbeat_pulse']})" if cons else ""))
     sys.exit(1 if fails else 0)
 
 

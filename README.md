@@ -15,7 +15,7 @@ Derived from working `WORKFLOW-*.md` guides validated on real song projects
 | `ableton-mcp` | Drive Ableton Live via the AbletonMCP server — tracks, clips, MIDI, devices, mixing; all the gotchas and hard limits |
 | `ableton-arrangement` | Compose/arrange a full song in Live — section design, bass pattern palette, drum conventions, FX chains |
 | `song-to-ableton` | End-to-end orchestrator: analyze a song, then rebuild/reinterpret it in Live (routes to the other skills) |
-| `bass-transcribe` | You played bass — transcribe the take to MIDI, a Live clip, or a tab/chart (CREPE pipeline) |
+| `bass-transcribe` | You played bass — transcribe the take to MIDI, a Live clip, or a tab/chart (pyin; CREPE for vocals) |
 
 ## Install
 
@@ -32,5 +32,27 @@ Restart Claude Code; the five skills appear in the skill listing.
 ## Layout
 
 Each skill: a lean `SKILL.md` (triggers + core rules) and, where needed, `references/`
-files loaded on demand. Machine-specific paths are isolated in a
-"Local environment (this machine)" section per skill — everything else is generic.
+files loaded on demand, `scripts/` the skill runs, and `tests/` for those scripts.
+Machine-specific paths are isolated in a "Local environment (this machine)" section per
+skill (written against `~`) — everything else is generic.
+
+Scripts:
+- `song-analysis/scripts/detect_meter.py` — meter by sweeping every cycle 2–25 (odd meters)
+- `song-analysis/scripts/chord_proposal.py` — per-cell chords, slash relaxation, flip count
+- `song-analysis/scripts/whisper_gated.py` — lyric word timing gated on the sung parts
+- `ableton-mcp/scripts/push_notes.py` — bulk note push over Live's TCP socket
+
+Tests run offline on synthetic audio or a mock Live socket:
+
+```bash
+<analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
+<analysis-venv>/bin/python song-analysis/tests/test_chord_proposal.py
+python3 ableton-mcp/tests/test_push_notes.py
+```
+
+Third-party tools the skills point to (ADTOF, madmom's models, demucs weights) keep their
+own licences — several are non-commercial — and are installed, never copied here.
+
+## License
+
+MIT — see `LICENSE`.

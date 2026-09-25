@@ -1,6 +1,6 @@
 ---
 name: bass-transcribe
-description: Use when the user has played bass (or another monophonic instrument) and wants the take transcribed — to a MIDI file, an Ableton Live clip, or a tab/chart. Default pipeline is pyin on the recorded audio (CREPE for vocals and expressive leads); basic-pitch for double-stops; includes note segmentation, cleanup rules, and real-time plugin alternatives.
+description: Use when the user has played bass or another single-note instrument (or sung a line) and wants the take as a MIDI file, an Ableton Live clip, or a tab/chart.
 ---
 
 # Bass Transcribe — played take → MIDI / Live clip / chart
@@ -140,6 +140,6 @@ wildly fewer → gate too high, the take is quieter than expected, or the part i
 ## Local environment (this machine)
 
 - Python with librosa + crepe 0.0.16 + basic-pitch 0.4.0 + pretty_midi:
-  `/Users/peripan/dev/abletonAI/audio-analysis/.venv-bp/bin/python`
+  `~/dev/abletonAI/audio-analysis/.venv-bp/bin/python`
 - Prior art: `scripts/transcribe_bass_pyin.py` in the tooling root — the pyin pipeline
   above, outputting beat-based JSON for Live.

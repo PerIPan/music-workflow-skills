@@ -1,6 +1,6 @@
 ---
 name: song-to-ableton
-description: Use when taking an existing song end-to-end — analyze a recording (bars, key, chords, lyrics, drum logic) and rebuild or reinterpret it in Ableton Live. Orchestrates the song-analysis, ableton-mcp, ableton-arrangement, and bass-transcribe skills. Ask first whether the user wants analysis, Ableton building, or both.
+description: Use when an existing song should be analysed and then rebuilt, covered or reinterpreted in Ableton Live end to end, or when it is unclear whether the user wants the analysis, the Live build, or both.
 ---
 
 # Song → Ableton (end-to-end orchestrator)
@@ -64,7 +64,7 @@ energy in Ableton. Analysis says *what the song is*; the build decides *how it s
 
 ## Local environment (this machine)
 
-- Analysis tooling + venvs: `/Users/peripan/dev/abletonAI/audio-analysis/`
+- Analysis tooling + venvs: `~/dev/abletonAI/audio-analysis/`
   (`.venv-bp`, `.venv-demucs`); song folders live next to it in
-  `/Users/peripan/dev/abletonAI/`.
+  `~/dev/abletonAI/`.
 - Ableton MCP configured via that project's `.mcp.json`.
