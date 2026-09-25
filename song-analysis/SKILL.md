@@ -28,9 +28,9 @@ laiko, punk reinterpretations). Works for any song, genre, or key.
 | Meter / bar length | **`scripts/detect_meter.py`** | Sweeps every cycle 2–25; finds odd meters |
 | Key (melodic mode) | **librosa** chroma + Krumhansl | Signal only — see Trap 2 |
 | Stem separation | **demucs `htdemucs_ft`** (4-stem) | Cleanest bass; NEVER `htdemucs_6s` (bleeds piano/guitar into bass) |
-| Bass → MIDI | **CREPE** (`full` + viterbi) | Monophonic tracker; gives the ROOT, not quality |
+| Bass → MIDI | **librosa pyin** (40–220 Hz) | Monophonic tracker; gives the ROOT, not quality. Not CREPE — see Phase 3 |
 | Polyphonic parts → MIDI | **basic-pitch** | Piano/guitar/pads, double-stops |
-| Chords | **chroma + bass-root + major-bias** | 99% top-1 validated (see Phase 5b) |
+| Chords | **chroma + bass-root** (+ slash relax) | See Phase 5b |
 | Lyrics + word timing | **mlx-whisper `large-v3-turbo`** (Apple Silicon) | Word timestamps, hallucination-filterable |
 | Drum-pattern read | **librosa** band-limited onsets | see reference |
 | Chart output | Python → self-contained **HTML** | see reference |
@@ -58,16 +58,16 @@ inherits the error. Get the pulse first; derive the meter in 1b.
 ### 1b. Derive the meter by sweeping every cycle length
 
 ```bash
-scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
+<venv>/bin/python scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
     --bass stems/<song>/bass.wav --other stems/<song>/other.wav \
-    --foundation analysis/<song>_foundation.json
+    --foundation analysis/foundation.json
 ```
 
 **Always pass `--bass` and `--other` too.** Plenty of songs have no drum kit, or a
 percussion part that is an undifferentiated pulse carrying no accent — and the cycle is
 still there, articulated by the bass and the harmony instead. The signature is a drum
 contrast stuck near 1.2 while the bass reaches 3–4 and resolves the cycle cleanly. The
-script falls back to these stems automatically when fewer than two drum bands decide.
+script falls back to these stems automatically when no two drum bands agree.
 
 Phase-folds band-limited kick / snare / hat onsets onto every cycle length from 2 to 25
 pulses and ranks by **accent contrast** = loudest position in the cycle ÷ quietest.
@@ -78,8 +78,9 @@ Reading the output:
 | Output | Means | Do |
 |---|---|---|
 | Consensus, confidence HIGH | Real cycle, clear of unrelated periods | Use it. Odd winner → odd meter |
-| Consensus on a multiple of 4, confidence LOW | Plain 4/4 with an *n*-bar pattern | Report 4/4 + phrase length, not an *n*-beat bar |
-| INCONCLUSIVE | Bands disagree, or no usable accent | Report the ambiguity. Do NOT pick one |
+| Consensus on 8, 16, 24 (script prints a PHRASE note) | Usually plain 4/4 with an *n*-bar pattern | Report 4/4 + phrase length, not an *n*-beat bar |
+| Consensus on 2 | Duple; the bar-level accent is too faint to fix 2/4 vs 4/4 | Report duple; ask the user to count |
+| INCONCLUSIVE | Bands disagree, no usable accent, or no band clear of unrelated periods (margin < 1.3) | Report the ambiguity. Do NOT pick one |
 | Winner is prime (7, 11, 13) | Cannot be a phrase of anything smaller | Almost certainly the meter |
 | Winner = 2× a strong period | The half is the bar, the double is two bars | Take the fundamental |
 
@@ -88,6 +89,11 @@ at twice the tracked pulse, the beat tracker is reading half-time: re-run on the
 grid, because a cycle of 8 there shows up as 4 here. Check the tempo octave *before*
 trusting any cycle length.
 
+Needs librosa, plus madmom unless `--foundation` supplies the beat grid. `--json` writes
+every band's sweep, per-band verdicts (cycle, margin, accented positions) and the
+consensus. Smoke test: `<venv>/bin/python tests/test_detect_meter.py` (synthetic 4/4,
+3/4, 6/8, 5/4, 7/8, 11/8 and flat clicks; ~8 s).
+
 **A song with no percussion at all cannot be metered this way** — say so and move on
 rather than straining the harmonic stem for an answer it does not contain.
 
@@ -95,8 +101,14 @@ rather than straining the harmonic stem for an answer it does not contain.
 at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7.
 
 Save as `analysis/foundation.json`: `pulse_bpm`, `beat_times`, `beats_per_bar` (from 1b,
-**not** from madmom), `downbeat_times` (every *n*-th beat from the winning phase),
-`num_bars`, `key`.
+**not** from madmom), `pulse_unit` (4 if the pulse is a quarter note, 8 if an eighth),
+`grouping` (the internal split, e.g. `[6, 5]`; `[2, 2]` for 4/4), `downbeat_times` (every
+*n*-th beat from the winning phase), `num_bars`, `key`.
+
+**Cells.** Everything downstream (bass, chords, lyrics, chart) is keyed by `(bar, cell)`,
+one cell per group in `grouping`: 4/4 → 2+2 (the familiar half-bars), 3/4 → one cell,
+6/8 → 3+3, 11/8 as 6+5 → two unequal cells. Never split an odd bar at its midpoint — that
+lands mid-pulse.
 
 **Sanity checks:** BPM stable (no jumps); watch half/double-time on slow songs (60–90
 BPM) — count along the audio; cross-check `num_bars` against
@@ -106,14 +118,20 @@ or a wrong meter.
 ## Phase 2 — Stems
 
 ```bash
-demucs -n htdemucs_ft -o stems <song.mp3>
-# → stems/htdemucs_ft/<song>/{bass,drums,vocals,other}.wav   (~50s for 2:30 on M3 Pro)
+demucs -n htdemucs_ft -d mps -o stems <song.mp3>
+# → stems/htdemucs_ft/<song>/{bass,drums,vocals,other}.wav
 ```
 
-**CHECK THE CACHE FIRST — `du -sh ~/.cache/torch/hub/checkpoints`.** `htdemucs_ft` is a
-bag of 4 models (~320 MB). If it isn't cached, that command silently downloads for as long
-as your connection takes — measured at ~3 MB/min (≈100 min) on 2026-08-06 — and shows no
-progress at all if you pipe it through `tail`. Don't assume it's cached because you used it
+**Always pass `-d mps` on Apple Silicon.** demucs 4.0.1 defaults to CUDA-else-CPU, so
+without the flag it runs on the CPU. Measured on an M3 (30 s clip): CPU 64.5 s, MPS 23.0 s,
+stems within noise of each other. Meter-only runs need just the drums:
+`--two-stems=drums`.
+
+**CHECK THE CACHE FIRST — `du -sh ~/.cache/torch/hub/checkpoints`** (demucs 4.0.1; 4.1.x
+loads from the Hugging Face cache instead). `htdemucs_ft` is a bag of 4 models (4 × 84
+MB). If it isn't cached, that command silently downloads for as long as your connection
+takes — measured at ~3 MB/min (≈100 min) on 2026-08-06 — and shows no progress at all if
+you pipe it through `tail`. Don't assume it's cached because you used it
 on a previous song.
 
 **Fast offline fallback (Apple Silicon):** plain htdemucs via MLX, weights already local —
@@ -134,12 +152,12 @@ struggled; try plain `htdemucs` as fallback.
 
 ## Phase 3 — Bass → MIDI
 
-Default: **CREPE** on `bass.wav` (monophonic → root line). For the CREPE→MIDI code and
+Default: **pyin** on `bass.wav` (monophonic → root line). For the pyin→MIDI code and
 cleanup rules, use the `bass-transcribe` skill — same pipeline. Use **basic-pitch** only
-if the part is polyphonic.
+if the part is polyphonic. CREPE is for vocals, not bass (reasons in `bass-transcribe`).
 
-Then aggregate per (bar, half): for each half-bar, total each pitch class's overlapping
-note duration and rank → `analysis/bass_per_bh.json`.
+Then aggregate per `(bar, cell)`: for each cell, total each pitch class's overlapping
+note duration and rank → `analysis/bass_per_cell.json`.
 
 **Spell pitch classes from the key signature, not from a fixed table.** Flat spelling
 (C, D♭, D, E♭ … B♭, B) is the right default for flat and neutral keys — it matches how
@@ -160,18 +178,23 @@ flats.
 
 Whisper is far more accurate on isolated vocals than the full mix.
 
-Settings that work: model `large-v3` (`mlx-community/whisper-large-v3-mlx` on Apple
-Silicon); `word_timestamps=True`; `no_speech_threshold=0.8`;
-`condition_on_previous_text=False` (avoids hallucination drift); post-filter known
-hallucinations ("Thank you.", "Blah Blah", ".") and 3+ identical repeats.
+Settings that work: model `mlx-community/whisper-large-v3-turbo` (Apple Silicon; the
+non-turbo `large-v3` is a separate ~3 GB download for no gain on lyrics);
+`word_timestamps=True`; `condition_on_previous_text=False` (avoids hallucination drift);
+post-filter known hallucinations ("Thank you.", "Blah Blah", ".") and 3+ identical repeats.
+
+`no_speech_threshold=0.8` suppresses hallucinated text in silence **but also drops real,
+sparse vocals** — it can return nothing for a track that has singing. If the result looks
+empty or thin, re-run at `0.45` and diff: what only the second pass finds is either sparse
+real text or hallucination, and the vocal stem's RMS in that span tells you which.
 
 Map each word's start time to (bar, beat):
 
 ```python
-def locate(t, downbeats, bpb=4):
+def locate(t, downbeats, beats_per_bar):     # from foundation.json — no default, never assume 4
     for i in range(len(downbeats)-1):
         if downbeats[i] <= t < downbeats[i+1]:
-            return (i+1, (t - downbeats[i]) / (downbeats[i+1] - downbeats[i]) * bpb)
+            return (i+1, (t - downbeats[i]) / (downbeats[i+1] - downbeats[i]) * beats_per_bar)
     return None
 ```
 
@@ -182,75 +205,66 @@ boundaries = where each labeled section's first line lands. **Don't trust automa
 section detection** (librosa recurrence segmentation is ±1 bar off around bridges/outros);
 the lyrics + word timing are far more reliable.
 
-## Phase 5b — Chord proposal (chroma + bass-root + major-bias)
+## Phase 5b — Chord proposal (chroma + bass-root)
 
-Per half-bar, on the `other.wav` stem (everything harmonic except bass/drums/vocals).
-Validated: **99% top-1, 100% top-3** on modal-major dream pop.
+Per cell, on the `other.wav` stem (everything harmonic except bass/drums/vocals).
 
 1. **Chroma**: average `librosa.feature.chroma_cqt(other.wav)` over the cell's frames.
 2. **Score all 24 triad templates** (12 maj + 12 min, binary root/3rd/5th, sum-normalized)
    by dot product with the cell chroma.
 3. **Bass-root constraint** (only when `bar >= BASS_ENTRY_BAR`): if one bass pitch class
    has ≥0.5 s sustain in the cell, restrict candidates to the maj+min triads on that root —
-   **but relax it on slash chords** (see below).
-4. **Major-bias**: if top template is minor and same-root major is within margin
-   `MAJOR_BIAS_MARGIN`, swap. ("Default major; fall back to minor only if it clearly
-   clashes.") **The 0.05 default is genre-specific — see the warning below.**
+   **unless step 4 relaxes it**.
+4. **Slash-chord relaxation (REQUIRED — +17.7 points).** The constraint assumes the bass
+   note *is* the root. On a slash chord the bass plays the 3rd or 5th, and constraining to
+   it forces a guaranteed-wrong answer:
 
-### 3b. Slash-chord relaxation (REQUIRED — validated +17.7 points)
+   ```python
+   allc = sorted(all 24 templates by score, desc)
+   con  = [c for c in allc if root_of(c) == bass_pc]
+   use_constrained = con and con[0].score >= RELAX_FACTOR * allc[0].score   # 0.85
+   ```
 
-The bass-root constraint assumes the bass note *is* the root. On a slash chord the bass
-plays the 3rd or 5th, and constraining to it forces a guaranteed-wrong answer. Fix:
+   If the best chord rooted on the bass note scores materially worse than the
+   unconstrained best, the bass is a non-root chord tone — drop the constraint and let
+   chroma decide. `RELAX_FACTOR = 0.85`; anything ≥0.85 behaves identically, 0.0 = off.
+   Measured on a minor-tonic track built around a dominant-7th slash chord (C♯7/F, bass
+   on the 3rd, E♯): without it every C♯7 cell became `Fm`, the minor triad on the bass
+   note (14 misses, a third of all errors). With it: **73.8% → 91.5%** root+quality.
+5. **Emit top-3** per cell + `beat3_re_attack` flag from onset detection on the same stem
+   (corroborating evidence only — noisy).
+6. **Major-bias diff pass.** Re-run with `MAJOR_BIAS_MARGIN = 0.05` (if the top template is
+   minor and the same-root major is within the margin, swap) and **report the flip
+   count**. Never adopt the biased result silently.
 
-```python
-allc = sorted(all 24 templates by score, desc)
-con  = [c for c in allc if root_of(c) == bass_pc]
-use_constrained = con and con[0].score >= RELAX_FACTOR * allc[0].score   # 0.85
-```
+### `MAJOR_BIAS_MARGIN`: default 0, never gated on the key
 
-If the best chord rooted on the bass note scores materially worse than the unconstrained
-best, the bass is a non-root chord tone — drop the constraint and let chroma decide.
-`RELAX_FACTOR = 0.85`; anything ≥0.85 behaves identically, 0.0 = old behaviour.
-
-Measured on a minor-tonic track built around a dominant-7th slash chord (C♯7/F, bass on
-the 3rd, E♯): the old rule mislabelled every C♯7 cell as `Fm`, the minor triad on the
-bass note (14 misses, a third of all errors). With relaxation the pipeline recovers
-`C♯` with F in the bass unaided — **73.8% → 91.5%** root+quality.
-
-### ⚠️ `MAJOR_BIAS_MARGIN` is the single highest-leverage parameter
-
-The shipped default `0.05` is tuned for **modal-major dream pop**. On an honest-minor
-song it flips the tonic minor to major on nearly every cell. Measured on the same
-minor-tonic track (F♯m tonic), same audio, only this parameter changed:
+It is the single highest-leverage parameter. Same minor-tonic track (F♯m tonic), same
+audio, only this changed:
 
 | `MAJOR_BIAS_MARGIN` | root+quality |
 |---|---|
-| 0.05 (shipped default) | **27.4%** |
+| 0.05 | **27.4%** |
 | 0.02 | 54.9% |
-| 0.0 | **73.8%** |
+| 0 | **73.8%** |
 
-A 46-point swing. **Set it to 0 for any song whose tonic is minor**, and only raise it
-for modal-major material. The "99% top-1" figure quoted below was measured on
-modal-major dream pop and does not transfer across genres — re-tune per song.
-5. **Emit top-3** per cell + `beat3_re_attack` flag from onset detection on the same stem
-   (corroborating evidence only — noisy).
+A 46-point swing: at 0.05 the tonic minor flips to major on nearly every cell. The 0.05
+bias was tuned on modal-major dream pop, where it reached 99% top-1 / 100% top-3 — that
+figure does not transfer to other material.
 
-Why it works: bass-MIDI gives root but not quality; chroma gives quality but confuses
-4th/5th-related roots; major-bias cancels the minor-key bias. Any one signal alone ≈
-70–90%; the combination hits 99%. Errors concentrate in pre-bass-entry bars,
+**Never gate the bias on the detected key.** The key estimator reports the *melody's*
+mode, so a modal song pedalling on a major triad returns "major" — which switches on the
+very bias that destroys its minor chords. Measured: gating on a major key estimate flipped
+the majority of cells in a track (70%+), turning a minor loop into a phantom major one.
+
+A large flip count means the cells are near-ties and the quality call is genuinely
+uncertain — say so rather than picking silently. To settle major vs minor on one chord,
+compare chroma energy of the major third against the minor third directly: G♯ at 14.4%
+vs G♮ at 4.7% closes the question in a single number.
+
+Why the combination works: bass MIDI gives the root but not the quality; chroma gives the
+quality but confuses 4th/5th-related roots. Errors concentrate in pre-bass-entry bars,
 sustained-organ smear, and extended chords (expand templates with 7th/sus for jazz/R&B).
-
-**Default `MAJOR_BIAS_MARGIN` to 0, and never gate it on the detected key.** The key
-estimator reports the *melody's* mode, so a modal song pedalling on a major triad returns
-"major" — which switches on the very bias that destroys its minor chords. Measured: gating
-on a major key estimate is enough to flip **the majority of cells in a track** (70%+),
-turning a minor loop into a phantom major one.
-
-Always run bias 0 and bias 0.05 and **report the flip count**. A large count means the
-cells are near-ties and the quality call is genuinely uncertain — say so rather than
-picking silently. To settle major vs minor on one chord, compare chroma energy of the
-major third against the minor third directly: G♯ at 14.4% vs G♮ at 4.7% closes the
-question in a single number.
 
 Per-song tuning: `BASS_ENTRY_BAR`, template set.
 
@@ -258,21 +272,27 @@ Per-song tuning: `BASS_ENTRY_BAR`, template set.
 
 Read `references/chart-and-lyrics.md` before building the chart. Core invariants:
 - One row per section; parallel sections get identical row splits.
-- Chart bar = audio bar (no virtual bars).
-- Chord dict keyed by `(bar, half)`.
+- Chart bar = audio bar. A virtual bar only where the audio has none (e.g. a rubato hold
+  the beat tracker skipped) — and mark it on the chart.
+- Chord dict keyed by `(bar, cell)` (cells from `grouping`, Phase 1).
 - **Lyric phrases anchor at the chord they resolve INTO** (Rule 1 — the big one).
 - Output: single self-contained HTML, print-friendly, harmonic-notes block at bottom.
 
 ## Hard rules — the cardinal traps
 
-### Trap 1 — Bass walk ≠ slash chord
+### Trap 1 — A bass walk is one chord or two; the upper voicing decides
 
-Bass moving across a bar's halves (`C → A♭`) has two readings: (1) one held chord with
-moving bass (`Cm/A♭`) or (2) **two chords** (`Cm → A♭`). Automated tools bias to (1);
-many indie/folk/dreampop songs are doing (2).
+Bass moving within a bar (`C → A♭`) has two readings, and both are common: (1) one held
+chord over a moving bass (`Cm/A♭`, or a drone with a walking bass) or (2) **two chords**
+(`Cm → A♭`). The bass alone cannot tell them apart — and a bass-constrained matcher
+simply follows the bass, so it reports (2) either way.
 
-**Discriminating test:** listen for a **re-attack on beat 3** in `other.wav`. New
-voicing struck on beat 3 = two chords. Bass-only move under sustained voicing = slash.
+**Discriminating test — look above the bass:**
+- **Re-attack**: a new voicing struck where the bass moves (in `other.wav`) = two chords.
+- **Register-pooled chroma**: pool chroma per cell in the chord instrument's own register
+  (high-pass above ~165 Hz). If the pitch-class set changes with the bass = two chords;
+  if it stays put = one chord over a moving bass.
+
 Bass movement alone is a suspicion signal, never the decision.
 
 ### Trap 2 — "Minor key" ≠ minor chords
@@ -319,7 +339,8 @@ pass before declaring the chart done.
 2. Trust the user's ear over any analyzer disagreement.
 3. Chart bar = audio bar.
 4. Whisper timing is precise; musical placement is not strict timing (Rule 1).
-5. Bass walks mid-bar = chord changes → key by `(bar, half)`.
+5. A mid-bar bass walk may or may not change the chord (Trap 1) → key by `(bar, cell)`
+   so either reading can be written down.
 6. Chord-recognition tools are starting points, never ground truth.
 7. Each chart correction touches ~3 places (chord dict, row layout, cascading lyrics).
 8. Mirror parallel sections visually.
@@ -346,8 +367,9 @@ pass before declaring the chart done.
   `/Users/peripan/mlx-openai-whisper/bin/python`, and only
   `mlx-community/whisper-large-v3-turbo` is cached — naming `whisper-large-v3-mlx`
   triggers a ~3 GB download.
-- `mlx-demucs/.venv/bin/mlx-demucs` — for any multi-song batch. `htdemucs_ft` on CPU runs
-  >10 min per track even with weights cached; MLX did 5 songs in 3.5 min.
-- Existing helpers: `analyze_chords.py` (Phase 5b), `analyze_chord_onsets.py`,
-  `scripts/whisper_vocals.py` (Phase 4), chart generators `gen_*.py` per song folder.
+- `mlx-demucs/.venv/bin/mlx-demucs` — for any multi-song batch (plain htdemucs; 5 songs in
+  3.5 min). `htdemucs_ft` without `-d mps` runs on the CPU at ~2 s per second of audio.
+- Existing helpers: `analyze_chords.py` (Phase 5b — stale: set `MAJOR_BIAS_MARGIN = 0`),
+  `analyze_chord_onsets.py`, `scripts/whisper_vocals.py` (Phase 4), chart generators
+  `gen_*.py` per song folder.
 - Source docs (read-only): `WORKFLOW-song-analysis.md` in the tooling root.

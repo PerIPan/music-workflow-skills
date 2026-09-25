@@ -3,21 +3,26 @@
 
 Sweeps every cycle length from 2 to --max pulses, phase-folds band-limited
 percussion onsets onto each, and ranks by accent contrast (loudest position in
-the cycle / quietest). Cross-checks with onset-envelope autocorrelation.
+the cycle / quietest). Onset-envelope autocorrelation per period is printed
+alongside for reference; it does not enter the verdict.
 
 Why not madmom's beats_per_bar: it needs candidate meters up front, and a
 constrained list returns a confident wrong answer rather than an error. This
 sweep is unconstrained, so 11/8 and 7/8 are as reachable as 4/4.
 
-Usage:
-    detect_meter.py <audio.wav|mp3> [--drums stems/drums.wav] [--max 25]
-                    [--foundation analysis/x_foundation.json] [--json out.json]
+Usage (run with the analysis venv's python — needs librosa, and madmom unless
+--foundation is given):
+    <venv>/bin/python detect_meter.py <audio.wav|mp3> [--drums stems/drums.wav]
+        [--bass stems/bass.wav] [--other stems/other.wav] [--max 25]
+        [--foundation analysis/foundation.json] [--json out.json]
 
 Reads the pulse grid from --foundation if given (avoids recomputing madmom),
 otherwise tracks beats itself. --drums is strongly preferred: a separated drum
-stem gives a far cleaner accent profile than the full mix.
+stem gives a far cleaner accent profile than the full mix. --bass / --other are
+used automatically when no two drum bands agree.
 """
 import argparse, json, sys
+from math import gcd
 import numpy as np
 import librosa
 
@@ -26,6 +31,10 @@ BANDS = {"kick": (30, 110), "snare": (180, 450), "hat": (6000, 11000)}
 # bass and the harmonic part still articulate the cycle. Typical signature is a drum
 # contrast stuck near 1.2 while the bass reaches 3-4 and resolves the cycle.
 FALLBACK = {"bass": (30, 250), "harmonic": (80, 2000)}
+# A band only votes if its winner stands clear of every unrelated period. On five
+# reference songs, real cycles measured 2.0-17x; drumless or kit-less material sat
+# at 1.0-1.25x (every fold alike). Calibrated on that small set — revisit with more.
+MIN_MARGIN = 1.3
 
 
 def pulse_grid(audio_path, foundation=None):
@@ -81,14 +90,20 @@ def verdict(rows, label):
     ranked = sorted(rows, key=lambda r: -r["contrast"])
     win = ranked[0]
     P = win["period"]
-    # the strongest period that is NOT a multiple or divisor of the winner
-    rival = next((r for r in ranked[1:]
-                  if r["period"] % P and P % r["period"]), None)
-    margin = win["contrast"] / rival["contrast"] if rival else float("inf")
-    # fundamental: smallest period whose multiples explain the winner
-    fund = min((r["period"] for r in ranked[:4]
+    # fundamental: smallest divisor of the winner that keeps most of its contrast.
+    # Search every divisor, not just the top few: all multiples of a cycle score
+    # alike (longer ones slightly higher, fewer samples per position), so a 5- or
+    # 3-cycle's own period can rank below four of its multiples.
+    fund = min((r["period"] for r in rows
                 if P % r["period"] == 0 and r["contrast"] > 0.6 * win["contrast"]),
                default=P)
+    # rival: the strongest period UNRELATED to the fundamental. Related = a multiple
+    # or divisor of it, or sharing a factor >= 3 (the same bar or beat group): for a
+    # cycle of 8, periods 4, 12, 16, 20, 24 are all one 4/4 grid, not competitors.
+    def related(q):
+        return q % fund == 0 or fund % q == 0 or gcd(q, fund) >= 3
+    rival = next((r for r in ranked if not related(r["period"])), None)
+    margin = win["contrast"] / rival["contrast"] if rival else float("inf")
     print(f"\n  [{label}] top periods by accent contrast:")
     for r in ranked[:6]:
         tag = ""
@@ -100,6 +115,10 @@ def verdict(rows, label):
         print(f"    VERDICT: no measurable accent (best contrast {win['contrast']:.2f}).")
         print("      Either this part has no metric accent, or the cycle is longer")
         print(f"      than --max. Re-run with a larger --max before concluding anything.")
+        return None
+    if margin < MIN_MARGIN:
+        print(f"    VERDICT: no distinct cycle — best ({fund}) is only {margin:.2f}x clear of")
+        print(f"      unrelated periods (< {MIN_MARGIN}). Every fold looks alike: noise, not meter.")
         return None
     print(f"    VERDICT: cycle of {fund} pulses"
           + (f" (winner {P} = {P//fund}x)" if P != fund else "")
@@ -117,7 +136,7 @@ def verdict(rows, label):
               f"({fund//4} bars of 4/4) rather than one bar.")
         print(f"      Check whether {fund//2} and {max(fund//4,2)} also score well, and "
               f"whether the profile is one busy bar plus quiet ones (= phrase, not meter).")
-    return (fund, margin)
+    return (fund, margin, strong)
 
 
 def main():
@@ -139,39 +158,44 @@ def main():
     if not a.drums:
         print("  WARNING: no drums stem. Separate first — full-mix accents are muddier.")
 
-    out = {}
-    fundamentals = []
-    margins = []
+    out, verdicts = {}, {}
+    fundamentals, margins = [], []
     weak = 0
-    for name, (lo, hi) in BANDS.items():
-        ps = band_pulse_strength(y, sr, bt, beat, lo, hi)
-        rows = sweep(ps, a.max)
+
+    def run(name, rows):
+        nonlocal weak
         out[name] = rows
         f = verdict(rows, name)
+        verdicts[name] = (dict(cycle=f[0], margin=round(f[1], 2), accented=f[2])
+                          if f else None)
         if f: fundamentals.append(f[0]); margins.append(f[1])
         else: weak += 1
 
-    # --- fallback: no kit, or a kit that carries no accent
-    if len(fundamentals) < 2 and (a.bass or a.other):
+    for name, (lo, hi) in BANDS.items():
+        run(name, sweep(band_pulse_strength(y, sr, bt, beat, lo, hi), a.max))
+
+    # --- fallback: no kit, or a kit that carries no agreed accent
+    drum_agree = max((fundamentals.count(f) for f in fundamentals), default=0)
+    if drum_agree < 2 and (a.bass or a.other):
         print("\n  drum bands inconclusive — falling back to bass / harmonic stems")
         print("  (a song with no kit still articulates its cycle through pitch)")
         for nm, path in (("bass", a.bass), ("harmonic", a.other)):
             if not path: continue
             yy, _ = librosa.load(path, sr=22050, mono=True)
             lo, hi = FALLBACK[nm]
-            ps = band_pulse_strength(yy, sr, bt, beat, lo, hi)
-            f = verdict(sweep(ps, a.max), nm)
-            if f: fundamentals.append(f[0]); margins.append(f[1])
-            else: weak += 1
+            run(nm, sweep(band_pulse_strength(yy, sr, bt, beat, lo, hi), a.max))
+    tested = len(verdicts)
 
     print("\n" + "=" * 62)
     agree = max(set(fundamentals), key=fundamentals.count) if fundamentals else None
     n = fundamentals.count(agree) if agree else 0
     if n >= 2:
-        print(f"CONSENSUS: {agree} pulses per cycle ({n}/{len(BANDS)} bands agree)")
+        print(f"CONSENSUS: {agree} pulses per cycle ({n}/{tested} bands agree)")
         print(f"  cycle = {agree} x {beat*1000:.0f} ms = {agree*beat:.2f} s")
         print(f"  -> ~{(bt[-1]-bt[0])/(agree*beat):.0f} bars across the tracked span")
         mg = float(np.median(margins))
+        consensus = dict(cycle=agree, bands_agree=n, bands_tested=tested,
+                         margin=round(mg, 2), confidence="HIGH" if mg >= 2.0 else "LOW")
         if mg >= 2.0:
             print(f"  confidence HIGH: {mg:.1f}x clear of unrelated periods.")
         else:
@@ -179,8 +203,9 @@ def main():
             print(f"    A low margin on a multiple of 4 usually means plain 4/4 with a")
             print(f"    {agree//4}-bar pattern, not a {agree}-beat bar. Say so, don't overclaim.")
     else:
-        why = (f"{weak}/{len(BANDS)} bands showed no usable accent"
-               if weak else f"the {len(BANDS)} bands disagree: {fundamentals}")
+        consensus = None
+        why = (f"{weak}/{tested} bands showed no usable accent"
+               if weak else f"the {tested} bands disagree: {fundamentals}")
         print(f"INCONCLUSIVE: {why}.")
         print("  Do NOT pick a meter from this. Common causes: the percussion is an")
         print("  undifferentiated pulse, there is no kit at all, or the part is")
@@ -194,8 +219,8 @@ def main():
     print("      and settles in seconds what this sweep can only rank.")
     print("=" * 62)
     if a.json:
-        json.dump(dict(pulse_bpm=60/beat, n_pulses=len(bt), bands=out),
-                  open(a.json, "w"), indent=1)
+        json.dump(dict(pulse_bpm=60/beat, n_pulses=len(bt), consensus=consensus,
+                       verdicts=verdicts, bands=out), open(a.json, "w"), indent=1)
 
 
 if __name__ == "__main__":

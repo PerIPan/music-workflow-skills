@@ -5,8 +5,8 @@ description: Use when controlling Ableton Live through the AbletonMCP server —
 
 # Ableton Live via MCP
 
-Claude drives a live Ableton Set through the AbletonMCP server (150+ tools, all prefixed
-`mcp__ableton__`).
+Claude drives a live Ableton Set through the AbletonMCP server (jpoindexter fork v2.0.0,
+128 tools, all prefixed `mcp__ableton__`). Limits below are for this fork.
 
 **References (read on demand):**
 - `references/setup-install.md` — first-time install (Remote Script + server + verify)
@@ -129,8 +129,9 @@ section, get direction, then propagate.
 
 ## Local environment (this machine)
 
-- `.mcp.json` already configured in `/Users/peripan/dev/abletonAI/` (server `ableton`
-  via `uvx ableton-mcp`); Remote Script installed.
+- `.mcp.json` already configured in `/Users/peripan/dev/abletonAI/` (server `ableton` via
+  `uvx --from <that dir>/ableton-mcp --with mcp[cli]==1.4.1 ableton-mcp`); Remote Script
+  from the same checkout installed.
 - Recording session output to audio: empty-slot record needs a UI click — use Resample
   workflow instead.
 - Source doc (read-only): `/Users/peripan/dev/abletonAI/audio-analysis/WORKFLOW-ableton-mcp.md`.

@@ -14,17 +14,21 @@ Every section starts a new row. Within a section, split into multiple rows if ne
 
 **Chart bar = audio bar.** Do not insert "virtual" bars to make the chart breathe. If a
 section ends with a sustained chord, use the natural audio bar where it sustains. This
-keeps the chart trivially mappable back to audio for re-checking.
+keeps the chart trivially mappable back to audio for re-checking. The one exception: a
+virtual bar where the audio genuinely has no bar (e.g. a rubato hold the beat tracker
+skipped) — mark it visibly so the mapping stays traceable.
 
 ### Cells per bar
 
-Two half-bars per bar (h1 = beats 1–2, h2 = beats 3–4). Each cell shows:
+One cell per metric group of the bar — the `grouping` in `foundation.json`. In 4/4 that is
+two half-bars (h1 = beats 1–2, h2 = beats 3–4); an 11/8 bar split 6+5 has two unequal
+cells; a 3/4 bar has one. The h1/h2 wording below is the 4/4 case. Each cell shows:
 - **Chord** (large) — guitar/piano shape
 - **(bass note)** in small blue parens — only if bass differs from chord root (slash-chord notation)
-- **Lyric** (small italic) — words sung in this half-bar
+- **Lyric** (small italic) — words sung in this cell
 
-Key the chord dict by `(bar, half)` so chords can change mid-bar (which they often do —
-see "Bass walks reveal chord changes mid-bar" below).
+Key the chord dict by `(bar, cell)` so chords can change mid-bar (which they often do —
+see "Bass walks" below).
 
 ### Grid widths
 
@@ -110,16 +114,18 @@ Patterns that recur across songs:
 - **"Mirror parallel sections visually."** If Chorus 1 is 10 bars in a 6+4 row split,
   Chorus 2 must be the same — even when the lyric distribution differs. The band's eye
   expects symmetry.
-- **"Bass walks reveal chord changes mid-bar."** When bass moves `C → A♭` across the two
-  halves of a bar, that's *two chords* (Cm → A♭), not a static slash chord. Key the chord
-  dict by `(bar, half)`, not by `bar`.
+- **"Bass walks: one chord or two — look above the bass."** When bass moves `C → A♭`
+  across a bar's cells, it is *two chords* (Cm → A♭) if the upper voicing re-attacks or
+  its pitch-class set changes, and *one chord over a moving bass* (Cm/A♭, or a drone) if
+  the voicing holds. Both happen; the test is Trap 1 in the skill. Key the chord dict by
+  `(bar, cell)`, not by `bar`, so either reading fits.
 - **"Bass annotation only when it differs from chord root."** No redundant `(C)` under a
   `Cm` chord. Slash chord notation (`G/B` rendered as `G (B)`) is what bands actually read.
 - **"Bass enters at bar X — suppress before."** Most songs have an instrumental setup of
   1–8 bars before bass enters. Stem separation picks up bleed in those bars; suppress
   annotations before the documented bass-entry bar.
-- **"Chart bar = audio bar."** Only insert virtual bars when there is genuinely no
-  corresponding audio bar (rare).
+- **"Chart bar = audio bar."** Only insert a virtual bar when there is genuinely no
+  corresponding audio bar (rare) — and mark it.
 
 Each correction usually touches three places: (a) the chord dict, (b) the row layout,
 (c) the cascading lyrics in subsequent cells. Plan for cascading edits.

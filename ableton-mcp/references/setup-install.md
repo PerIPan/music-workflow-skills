@@ -18,7 +18,13 @@ Claude  <->  MCP server (Python)  <->  Ableton Remote Script  <->  Live (LOM)
                             port 9877 TCP
 ```
 
-Repo: <https://github.com/ahujasid/ableton-mcp> (150+ tools; count varies by build).
+Repo: **<https://github.com/jpoindexter/ableton-mcp>** (v2.0.0, 128 tools) — the fork this
+skill documents. The original <https://github.com/ahujasid/ableton-mcp> (also what
+`uvx ableton-mcp` fetches from PyPI) has ~37 tools and lacks `health_check`,
+`remove_notes`, the `humanize_*`/`generate_*` helpers and `get_scale_notes`, so most of the
+tool map in the skill fails on it. It has since gained arrangement tools
+(`duplicate_to_arrangement`, `get_arrangement_clips`) — worth re-checking before assuming
+a limit in the skill still applies there.
 
 ## Prerequisites
 
@@ -29,8 +35,9 @@ Repo: <https://github.com/ahujasid/ableton-mcp> (150+ tools; count varies by bui
 
 ## 1. Install the Remote Script (the step people miss)
 
-0. `git clone https://github.com/ahujasid/ableton-mcp.git` — the script is
-   `AbletonMCP_Remote_Script/__init__.py`.
+0. `git clone https://github.com/jpoindexter/ableton-mcp.git` — the script is
+   `AbletonMCP_Remote_Script/__init__.py`. Server and Remote Script come from this one
+   checkout, so they always match.
 1. Locate Live's MIDI Remote Scripts folder:
    - **macOS:** right-click Ableton Live → Show Package Contents →
      `Contents/App-Resources/MIDI Remote Scripts/` — or
@@ -46,25 +53,31 @@ Repo: <https://github.com/ahujasid/ableton-mcp> (150+ tools; count varies by bui
 
 ## 2. Configure the MCP client
 
-**Claude Code** — `.mcp.json` at project root (merge into existing `mcpServers`):
+**Claude Code** — `.mcp.json` at project root (merge into existing `mcpServers`), running
+the server from the same checkout as the Remote Script:
 ```json
 { "mcpServers": {
-    "ableton": { "type": "stdio", "command": "uvx", "args": ["ableton-mcp"], "env": {} }
+    "ableton": { "type": "stdio", "command": "uvx",
+                 "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.4.1",
+                          "ableton-mcp"],
+                 "env": {} }
 } }
 ```
 
 **Claude Desktop / Cursor** — merge into the MCP config
 (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 ```json
-{ "mcpServers": { "AbletonMCP": { "command": "uvx", "args": ["ableton-mcp"] } } }
+{ "mcpServers": { "AbletonMCP": { "command": "uvx",
+    "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.4.1", "ableton-mcp"] } } }
 ```
 
 Restart the client. Notes:
 - `uvx` not on PATH → use its absolute path (e.g. `~/.local/bin/uvx`).
-- To run a local checkout (guarantees both halves match):
-  `"args": ["--from", "/path/to/ableton-mcp", "ableton-mcp"]`.
-- Server fails with an `mcp` import error → pin: add `"--with", "mcp[cli]==1.4.1"`
-  before `"ableton-mcp"` in args.
+- Don't use bare `"args": ["ableton-mcp"]` — that installs the PyPI package (the original
+  37-tool server), which won't match the fork's Remote Script.
+- The `mcp[cli]==1.4.1` pin avoids an `mcp` import error in newer releases.
+- Keep API keys for other servers out of `.mcp.json` literals — reference an environment
+  variable instead, since the file often ends up committed.
 
 ## 3. Verify
 

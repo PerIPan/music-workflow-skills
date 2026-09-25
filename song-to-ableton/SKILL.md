@@ -31,8 +31,8 @@ to what's needed.
 
 | Analysis output | Use in Ableton |
 |---|---|
-| BPM + `num_bars` | `set_tempo`; size clips in bars (32-bar song = 128 beats) |
-| `chord_proposal` per bar/half | chord clips on a synth/keys track, or a chart for a live band |
+| `pulse_bpm`, `pulse_unit`, `beats_per_bar`, `num_bars` | `set_tempo(pulse_bpm × 4 / pulse_unit)` — Live's tempo counts quarter notes. One bar = `beats_per_bar × 4 / pulse_unit` Live beats (4/4 → 4, 7/8 → 3.5, 11/8 → 5.5); size clips in whole bars |
+| `chord_proposal` per `(bar, cell)` | chord clips on a synth/keys track, or a chart for a live band |
 | bass MIDI (root line) | reference clip — or **leave the bass slot empty** for a live bassist |
 | drum-pattern read | match the original's kick/snare logic (or `generate_drum_pattern`); never impose a rock backbeat on a non-rock song |
 | key/mode | scale + voicings (mind major-triads-under-minor-melody — Trap 2 in `song-analysis`) |
@@ -45,8 +45,9 @@ energy in Ableton. Analysis says *what the song is*; the build decides *how it s
 ## Quickstart
 
 1. Drop `<song>.mp3` + `lyrics.txt` in a song folder.
-2. Run the `song-analysis` pipeline: stems (htdemucs_ft) → foundation (bars/BPM/key) →
-   bass via CREPE → chords via chroma+bass-root → Whisper on the vocals stem.
+2. Run the `song-analysis` pipeline: stems (htdemucs_ft) → pulse + key → **meter sweep
+   (`detect_meter.py`; never assume 4/4)** → bass via pyin → chords via chroma+bass-root
+   → Whisper on the vocals stem.
 3. Open Ableton; verify the MCP connection (`health_check` — see `ableton-mcp`).
 4. Build, e.g.: "At <BPM> in <key>, build a Session scene with these chords per bar
    <chord_proposal>, a drum pattern matching <kick/snare logic>, and leave the bass slot
@@ -54,7 +55,7 @@ energy in Ableton. Analysis says *what the song is*; the build decides *how it s
 
 ## Troubleshooting (route, don't debug here)
 
-- Noisy bass MIDI → CREPE not basic-pitch; bass bleed → `htdemucs_ft` + suppress
+- Noisy bass MIDI → pyin, not basic-pitch or CREPE; bass bleed → `htdemucs_ft` + suppress
   pre-bass-entry bars; too few snares detected → `delta≈0.15`, un-normalized envelope
   (all in `song-analysis`).
 - Can't connect / tools missing / device errors → `ableton-mcp`
