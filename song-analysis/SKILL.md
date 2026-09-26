@@ -31,14 +31,16 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 | 1 Pulse + key | **`scripts/foundation.py pulse`** (madmom beats + CNN key) | `foundation.json` (step 1) |
 | 2 Stems | **demucs `htdemucs_ft -d mps`** | `stems/htdemucs_ft/<song>/` |
 | 3 Meter | **`scripts/detect_meter.py`** → **`scripts/foundation.py meter`** | `meter.json`, `foundation.json` (step 2) |
-| 4 Bass → MIDI | **pyin** (`bass-transcribe` skill) | `bass.mid`, `bass_per_cell.json` |
-| 5 Lyrics | **`scripts/whisper_gated.py`** | `lyrics.json` |
-| 6 Sections | lyrics + word timing (as_seg may suggest) | section map |
+| 4 Bass, tonic, mode | **`scripts/bass_notes.py`** (pyin) → **`scripts/mode_test.py`** | `bass.mid`, `bass_per_cell.json`, `mode.json` |
+| 5 Lyrics | **`scripts/whisper_gated.py`** (gated by the vocal stem; stem and mix) | `lyrics.json`, `lyrics_mix.json` |
+| 6 Sections | **`scripts/align_lyrics.py`** (canonical lyrics ↔ word times) | `lyrics_aligned.json`, `sections.json` |
 | 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
 | 8 Chart | Python → self-contained **HTML** | chart |
 
 `<venv>` = the analysis venv; Whisper and lv-chordia have their own
-(`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`.
+(`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`. After any
+phase, `scripts/validate_artifacts.py analysis` checks the hand-offs (grid, grouping,
+cell coverage, time order) — run it before building on a result.
 
 ## Phase 1 — Pulse and key (no meter assumed)
 
@@ -48,8 +50,10 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 
 Tracks beats with **no bar assumption** — never pass `beats_per_bar=(3, 4)`: a constrained
 candidate list can't say "neither", so it returns the least-bad option with full
-confidence and every bar count inherits it. Writes `pulse_bpm`, `beat_times` and
-`key_top2`.
+confidence and every bar count inherits it. Writes `pulse_bpm`, `beat_times`,
+`key_top2` and `tempo_octave`: a pulse above 160 BPM is flagged as probably eighth notes
+(a 91 BPM soul track was tracked at 182), one below 70 as possibly half-time. If the
+user's count disagrees, re-run with `--min-bpm`/`--max-bpm` to force the other octave.
 
 **Key: the top two are the melody's key, not the tonic.** The madmom CNN beats chroma +
 Krumhansl by ~20 MIREX points and fixes relative-major/minor flips, but knows only 24
@@ -83,6 +87,11 @@ songs without a kit still carry the cycle in the bass and harmony, so always pas
 `--bass` and `--other`. It reports a cycle, the downbeat (counted with the kick) and the
 main split (`grouping`, e.g. 6+5) — or **INCONCLUSIVE**.
 
+If the sweep is INCONCLUSIVE or the pulse is slow, it also tries a 2× (eighth-note) grid
+— a half-time grid hides odd cycles — and prints the result with the command to adopt it.
+It warns when successive beat intervals run in a 3:2 ratio: the tracker may be following
+aksak groups (2+2+3) as uneven beats.
+
 `foundation.py meter` then writes `beats_per_bar`, `pulse_unit`, `time_signature`,
 `grouping`, `downbeat_times`, `num_bars`, `bar_bpm`, `tempo_drift_pct` and `live_tempo`.
 **It stops with a question instead of guessing** — put that question to the user and
@@ -101,11 +110,25 @@ place them through the beat grid (`ableton-mcp` → "Timing"). Watch half/double
 slow songs (60–90 BPM) — count along. A `num_bars` far from
 `duration ÷ (beats_per_bar × beat)` means rubato, a wrong tempo octave or a wrong meter.
 
-## Phase 4 — Bass → MIDI
+## Phase 4 — Bass, tonic and mode
 
-**pyin** on `$ST/bass.wav` (code, cleanup rules and the octave cross-check are in the
-`bass-transcribe` skill); basic-pitch only if the part is polyphonic. Then total each
-pitch class's sounding time per `(bar, cell)` → `analysis/bass_per_cell.json`.
+```bash
+<venv>/bin/python scripts/bass_notes.py $ST/bass.wav --foundation analysis/foundation.json \
+    --bass-entry-bar <N> --outdir analysis
+<venv>/bin/python scripts/mode_test.py --other $ST/other.wav \
+    --foundation analysis/foundation.json --bass-cells analysis/bass_per_cell.json \
+    [--sections analysis/sections.json] --out analysis/mode.json
+```
+
+`bass_notes.py`: **pyin** (why not CREPE: the `bass-transcribe` skill) → `bass.mid` and
+each pitch class's sounding time per `(bar, cell)`. basic-pitch only if the part is
+polyphonic. **The tonic is the pitch class the bass sustains longest** — not the key
+estimate. `mode_test.py` then names the mode by dueling characteristic degrees bar by bar
+(3 vs ♭3, 4 vs ♯4, 7 vs ♭7, 2 vs ♭2, 6 vs ♭6); a degree that doesn't sound doesn't vote,
+so a drone with no 6th reports "6th undetermined" instead of a guess. On a player-verified
+Lydian track: tonic E (57% of bass time), ♯4 in 32/32 bars — where the key CNN said G♯
+minor. With `sections.json` it runs per section and flags a tonic change only if it holds
+8+ bars. Method: `references/modal-theory.md`.
 
 **Spell pitch classes from the key signature.** Flats for flat and neutral keys; sharps
 for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the dominant `D♭7`.
@@ -115,19 +138,25 @@ for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the d
 - **Bass enters late** in most songs: find the entry bar and ignore everything before it
   (stem bleed).
 
-## Phase 5 — Lyric timing (Whisper on the vocals stem)
+## Phase 5 — Lyric timing (Whisper, gated by the vocal stem)
 
 ```bash
 <whisper-venv>/bin/python scripts/whisper_gated.py $ST/vocals.wav [--language en] \
     --out analysis/lyrics.json
+<whisper-venv>/bin/python scripts/whisper_gated.py $ST/vocals.wav --mix <song.mp3> \
+    [--language en] --out analysis/lyrics_mix.json          # when canonical lyrics exist
 ```
 
-Gates Whisper on where the stem is actually sung (RMS → `clip_timestamps`; long-form lyric
-WER 22.9% → 20.7% and far fewer filler hallucinations, arXiv 2506.15514), sets
-large-v3-turbo's word-alignment heads, and drops words whose *whole* span is silent
-(Whisper often starts a sung word before the voice is audible). Force `--language` when
-detection wobbles (chant, non-English). Then drop known hallucinations ("Thank you.",
-"Blah Blah", ".") and 3+ identical repeats.
+An RMS gate on the vocal stem, fed to Whisper as `clip_timestamps`, keeps it from
+transcribing silence; the script also sets large-v3-turbo's word-alignment heads and drops
+words whose *whole* span is silent. **Which audio to transcribe is song-dependent:**
+measured with this exact setup on 6 benchmark songs, the vocal stem averaged 19.8% word
+error and the full mix 23.6%, but either one won by up to 25 points on single songs
+(published results favouring the mix used Whisper without the gate). With canonical
+lyrics, transcribe both and let Phase 6 keep the one matching more of the lyrics — that
+picked the better transcription every time (17.9%). Without lyrics, use the vocal stem.
+Force `--language` when detection wobbles (chant, non-English). Keep repeated lines —
+mantras are lyrics — until Phase 6 has aligned them.
 
 Map each word to a bar:
 
@@ -139,13 +168,24 @@ def locate(t, downbeats, beats_per_bar):     # from foundation.json — never as
     return None
 ```
 
-## Phase 6 — Sections (from lyrics + audio)
+## Phase 6 — Sections (canonical lyrics aligned to the word times)
 
-For each canonical lyric line, find its first bar via the word timings + `locate()`.
-Section boundaries = where each labelled section's first line lands. Automatic
-segmentation can *suggest* boundaries, never decide them: `as_seg` (barwise CBM, fed this
-song's own bars, `penalty_weight=0`) hit 80% of lyric-anchored boundaries within ±1 bar on
-the one reference song with section truth, but only 27% within ±0.5 s.
+```bash
+python3 scripts/align_lyrics.py --lyrics lyrics.txt --words analysis/lyrics.json \
+    --words analysis/lyrics_mix.json --foundation analysis/foundation.json
+    # keeps the better transcription → lyrics_aligned.json, sections.json
+```
+
+Keeps the **canonical text** and borrows only Whisper's times: a monotonic alignment with
+fuzzy word matching (accents and Greek final sigma normalised) pairs canonical words with
+heard words; dropped lines — normal on repeats — get times interpolated between matched
+neighbours, and lines under 30% matched are flagged. In `lyrics.txt` a blank line starts a
+section and a `[Chorus]` line labels it; each section gets its first line's time and
+`(bar, cell)`. On the benchmark, 83% of line starts landed within 1 s (median error
+~0.5 s) and 98% of section starts within 2 s. Automatic segmentation can *suggest* boundaries, never decide them:
+`as_seg` (barwise CBM on this song's own bars, `penalty_weight=0`) hit 80% of
+lyric-anchored boundaries within ±1 bar on the one reference song with section truth,
+27% within ±0.5 s.
 
 ## Phase 7 — Chords (lv-chordia, cross-checked)
 
@@ -175,7 +215,18 @@ Read `references/chart-and-lyrics.md` before building the chart. Core invariants
   the beat tracker skipped) — and mark it.
 - Chord dict keyed by `(bar, cell)`.
 - **Lyric phrases anchor at the chord they resolve INTO** (Rule 1 — the big one).
+- **Show the evidence:** a header line saying where meter, grouping and mode came from
+  (`provenance`, `mode.json`), and each chord cell styled by its `status` — a "?" on
+  root disagreements and near-ties, so the player's check goes where it's needed.
 - Output: single self-contained HTML, print-friendly, harmonic-notes block at the bottom.
+
+## Benchmark
+
+`bench/run_bench.py` scores the artifacts against local ground truth (never committed):
+meter by bar length in seconds (so tempo octave doesn't matter), grouping, chords with
+mir_eval, section boundaries, mode, lyric WER and line timing. Set `$MWS_BENCH_ROOT` to
+the folder with `manifest.json`; `--baseline` fails on a 2-point drop. Human ceiling for
+chords: expert annotators agree on 73% (maj/min) / 54% (full labels) of segments.
 
 ## Hard rules — the cardinal traps
 

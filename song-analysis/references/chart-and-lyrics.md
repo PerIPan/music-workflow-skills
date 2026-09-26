@@ -130,6 +130,22 @@ Patterns that recur across songs:
 Each correction usually touches three places: (a) the chord dict, (b) the row layout,
 (c) the cascading lyrics in subsequent cells. Plan for cascading edits.
 
+## Showing uncertainty
+
+A chart that looks equally sure everywhere hides the ~30% of automated calls that are
+wrong on modal-mixture songs — and wastes the player's verification pass. Carry the
+evidence through:
+
+- **Header line:** meter, grouping, key/mode and where each came from — e.g.
+  "11/8 as 6+5 (sweep HIGH; beat 1 chosen by the player) · E Lydian (bass pedal + ♯4 in
+  32/32 bars)". Read it from `foundation.json` → `provenance` and `mode.json`.
+- **Cells:** style each chord cell by its `status` in `chords_lv.json`: `agree` plain;
+  `root-disagree` (the two chord readers name different roots) and `near-tie` (the triad
+  reading is a coin toss) with a dotted outline and a small "?"; `change-inside` (a chord
+  change falls inside the cell) with a split mark. Add a one-line legend.
+- **After the player's pass,** mark confirmed cells `player-verified` and drop their "?" —
+  the chart then shows what a musician checked, not just what software guessed.
+
 ## HTML output
 
 **HTML** — browser-friendly, opens on any device, prints cleanly to PDF, hostable in any

@@ -19,7 +19,7 @@ Run with the analysis venv (madmom + numpy; the meter step needs only numpy).
 """
 import argparse, json, sys
 
-CONVENTION = {2: [2], 3: [3], 4: [2, 2], 6: [3, 3], 9: [3, 3, 3], 12: [3, 3, 3, 3]}
+CONVENTION = {2: [2], 3: [3], 4: [2, 2], 6: [3, 3], 8: [4, 4], 9: [3, 3, 3], 12: [3, 3, 3, 3]}
 
 
 def ask(msg):
@@ -31,12 +31,22 @@ def cmd_pulse(a):
     import numpy as np
     from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
     from madmom.features.key import CNNKeyRecognitionProcessor, KEY_LABELS
-    beats = DBNBeatTrackingProcessor(fps=100)(RNNBeatProcessor()(a.audio))   # no bars
+    beats = DBNBeatTrackingProcessor(fps=100, min_bpm=a.min_bpm, max_bpm=a.max_bpm)(
+        RNNBeatProcessor()(a.audio))                                # beats only, no bars
     probs = CNNKeyRecognitionProcessor()(a.audio)[0]
     key_top2 = [[KEY_LABELS[i], round(float(probs[i]), 2)] for i in np.argsort(probs)[::-1][:2]]
-    F = dict(audio=a.audio, pulse_bpm=round(60.0 / float(np.median(np.diff(beats))), 2),
-             beat_times=[round(float(b), 4) for b in beats], key_top2=key_top2, step="pulse")
+    bpm = round(60.0 / float(np.median(np.diff(beats))), 2)
+    octave = ("fast: probably eighth notes (quarter ~%.0f)" % (bpm / 2) if bpm > 160 else
+              "slow: may be half-time - the meter sweep will also try a 2x grid" if bpm < 70
+              else "ok")
+    F = dict(audio=a.audio, pulse_bpm=bpm, tempo_octave=octave,
+             beat_times=[round(float(b), 4) for b in beats], key_top2=key_top2, step="pulse",
+             provenance=dict(pulse="measured (madmom DBN, %g-%g BPM)" % (a.min_bpm, a.max_bpm),
+                             key_top2="measured (madmom CNN; melody's key)"))
     json.dump(F, open(a.out, "w"), indent=1)
+    if octave != "ok":
+        print(f"TEMPO OCTAVE: {bpm} BPM is {octave}. Force another octave with "
+              f"--min-bpm/--max-bpm if the user's count disagrees.")
     print(f"pulse {F['pulse_bpm']} BPM, {len(beats)} beats; key {key_top2[0][0]} "
           f"(p={key_top2[0][1]}), then {key_top2[1][0]} (p={key_top2[1][1]}) - the melody's "
           f"key; check it against the bass pedal later")
@@ -52,9 +62,13 @@ def cmd_meter(a):
             "then re-run with --cycle N --grouping a,b [--downbeat-pulse K].")
     found = cons["cycle"] if cons else None
     if found in (8, 16, 24) and not a.cycle:
-        ask(f"the sweep found {found} pulses - usually {found // 4} bars of 4/4, not one bar. "
-            f"Re-run with --cycle 4 (4/4 with a {found // 4}-bar pattern) or --cycle {found} "
-            f"to keep it as one bar.")
+        fast = F["pulse_bpm"] > 140
+        ask(f"the sweep found {found} pulses - usually {found // 4} bars of 4/4, not one bar"
+            + (f", unless the {F['pulse_bpm']} BPM pulse is eighth notes (then it is one bar: "
+               f"--cycle {found} --pulse-unit 8)" if fast else "")
+            + f". Re-run with --cycle 4 (4/4 with a {found // 4}-bar pattern) or --cycle "
+              f"{found} to keep it as one bar (an aksak {found} such as 3+3+2 needs "
+              f"--grouping too).")
     if found == 2 and not a.cycle:
         ask("the sweep found a duple pulse (2) - it can't tell 2/4 from 4/4. Ask the user to "
             "count, then re-run with --cycle 2 or --cycle 4.")
@@ -102,7 +116,18 @@ def cmd_meter(a):
         gaps = sorted(y - x for x, y in zip(inside[:-1], inside[1:]))
         bar_bpm.append(round(60.0 / gaps[len(gaps) // 2], 2))
     med = sorted(bar_bpm)[len(bar_bpm) // 2]
-    F.update(beats_per_bar=cycle, pulse_unit=unit, time_signature=f"{cycle}/{unit}",
+    conf = (f"measured (sweep, {cons.get('confidence', '?')} {cons.get('margin', '?')}x)"
+            if cons else None)
+    prov = dict(F.get("provenance", {}))
+    prov.update(
+        cycle="user" if a.cycle and a.cycle != found else conf,
+        grouping=("user" if a.grouping else "user chose the alternative" if a.use_alternative
+                  else f"measured ({cons.get('grouping_source', 'accents')})" if cons and cycle == found
+                  else "convention"),
+        downbeat=("user" if a.downbeat_pulse is not None or a.use_alternative
+                  else f"measured ({cons.get('anchor_band', 'kick')} band)" if cons else "user"),
+        pulse_unit="user" if a.pulse_unit else "default (quarter)")
+    F.update(provenance=prov, beats_per_bar=cycle, pulse_unit=unit, time_signature=f"{cycle}/{unit}",
              grouping=grouping, downbeat_pulse=dp, pickup_pulses=dp,
              downbeat_times=downbeats, num_bars=len(downbeats) - 1, bar_bpm=bar_bpm,
              tempo_drift_pct=round((max(bar_bpm) - min(bar_bpm)) / med * 100, 1),
@@ -121,6 +146,8 @@ def main():
     p = sub.add_parser("pulse")
     p.add_argument("audio")
     p.add_argument("--out", default="analysis/foundation.json")
+    p.add_argument("--min-bpm", type=float, default=55.0, help="force a faster tempo octave")
+    p.add_argument("--max-bpm", type=float, default=215.0, help="force a slower tempo octave")
     m = sub.add_parser("meter")
     m.add_argument("--foundation", default="analysis/foundation.json")
     m.add_argument("--meter", default="analysis/meter.json")

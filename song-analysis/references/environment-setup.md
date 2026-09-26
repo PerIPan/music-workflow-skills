@@ -53,9 +53,10 @@ Notes:
 - **mlx-demucs** (optional batch path) runs **plain htdemucs** (not `_ft`) ~9× faster than
   torch-CPU demucs; for `_ft`, pass `-d mps` to torch demucs instead (~2.8× faster than
   CPU).
-- Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python
-  tests/test_detect_meter.py` and `tests/test_chord_proposal.py`, `python3
-  tests/test_foundation.py`; in `ableton-mcp/`, `python3 tests/test_push_notes.py`.
+- Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python` runs
+  `tests/test_detect_meter.py`, `test_chord_proposal.py` and `test_mode_test.py`;
+  `python3` runs `tests/test_foundation.py` and `test_align_lyrics.py`; in `ableton-mcp/`,
+  `python3 tests/test_push_notes.py`.
 
 ## Per-song working directory
 
@@ -69,9 +70,12 @@ Created fresh for each song:
 ├── analysis/
 │   ├── foundation.json                 # foundation.py: pulse + key, then meter fields
 │   ├── meter.json                      # detect_meter.py --json
-│   ├── bass.mid                        # bass transcription (pyin)
-│   ├── bass_per_cell.json              # per (bar, cell) pitch classes
+│   ├── bass.mid, bass_notes.json       # bass_notes.py (pyin)
+│   ├── bass_per_cell.json              # seconds per pitch class per (bar, cell)
+│   ├── mode.json                       # mode_test.py — tonic, mode, per-section
 │   ├── lyrics.json                     # whisper_gated.py words
+│   ├── lyrics_aligned.json             # align_lyrics.py — canonical lines with times
+│   ├── sections.json                   # align_lyrics.py — section starts, (bar, cell)
 │   ├── chords_lv.json                  # lv_chords.py — primary chord reading
 │   └── chord_proposal.json             # chord_proposal.py — triad cross-check
 ├── stems/htdemucs_ft/<song>/           # {bass,drums,vocals,other}.wav

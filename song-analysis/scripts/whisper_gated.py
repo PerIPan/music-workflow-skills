@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 """Phase 5: lyric word timing with mlx-whisper, gated on where the vocal stem is sung.
 
-An RMS gate on the separated vocal stem becomes Whisper's clip_timestamps, so it
-never transcribes silence (cut long-form lyric WER 22.9% -> 20.7% and most filler
-hallucinations on separated vocals, arXiv 2506.15514). Also sets large-v3-turbo's
-curated word-alignment heads, which mlx-whisper does not set itself, and drops
-words whose whole span lies outside the gate.
+An RMS gate on the separated vocal stem becomes Whisper's clip_timestamps, so
+Whisper never transcribes silence. By default the vocal stem is also what gets
+transcribed; --mix transcribes the full mix instead (still gated by the stem).
+Measured with this exact setup on 6 Jam-ALT English songs: vocal stem 19.8% WER vs
+full mix 23.6%, but the better source differs per song (by up to 25 points either
+way). With canonical lyrics, transcribe both and let align_lyrics.py keep the one
+that matches more of the lyrics (17.4% mean WER). Published results that favour the
+mix (arXiv 2408.06370, 2506.15514) used Whisper without this gate. Also sets
+large-v3-turbo's curated word-alignment heads, which mlx-whisper does not set
+itself, and drops words whose whole span lies outside the gate.
 
 Usage (the Whisper venv; Apple Silicon, needs mlx-whisper + librosa):
     <whisper-venv>/bin/python whisper_gated.py stems/htdemucs_ft/<song>/vocals.wav \
-        [--language en] [--gate 0.1] [--out analysis/lyrics.json]
+        [--mix <song.mp3>] [--language en] [--gate 0.1] [--out analysis/lyrics.json]
 """
 import argparse, json
 import numpy as np
@@ -46,7 +51,9 @@ def sung_clips(y, sr, gate):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("vocals", help="separated vocal stem")
+    ap.add_argument("vocals", help="separated vocal stem - drives the gate (and is "
+                                   "transcribed unless --mix is given)")
+    ap.add_argument("--mix", help="transcribe the full mix instead, still gated by the stem")
     ap.add_argument("--language", help="force it when auto-detect wobbles (chant, non-English)")
     ap.add_argument("--gate", type=float, default=0.1, help="fraction of max RMS counted as sung")
     ap.add_argument("--out", help="write words JSON here")
@@ -56,7 +63,7 @@ def main():
     clips, t, sung = sung_clips(y, sr, a.gate)
     ModelHolder.get_model(REPO, mx.float16).set_alignment_heads(TURBO_HEADS)
     res = mlx_whisper.transcribe(
-        a.vocals, path_or_hf_repo=REPO, word_timestamps=True,
+        a.mix or a.vocals, path_or_hf_repo=REPO, word_timestamps=True,
         clip_timestamps=[x for c in clips for x in c],
         condition_on_previous_text=False,          # avoids hallucination drift
         hallucination_silence_threshold=2.0, language=a.language)
@@ -75,7 +82,8 @@ def main():
           f"{len(words)} words kept, {len(dropped)} dropped as silence; "
           f"language {res.get('language')}")
     if a.out:
-        json.dump(dict(model=REPO, language=res.get("language"), clips=clips,
+        json.dump(dict(model=REPO, source="mix" if a.mix else "vocals",
+                   language=res.get("language"), clips=clips,
                        words=words, dropped=dropped), open(a.out, "w"),
                   indent=1, ensure_ascii=False)
 

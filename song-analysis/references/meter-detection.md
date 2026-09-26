@@ -67,6 +67,19 @@ at twice the tracked pulse, the tracker is reading half-time: re-run on the doub
 because a cycle of 8 there shows up as 4 here. Check the tempo octave *before* trusting
 any cycle length.
 
+## Tempo octave
+
+The sweep counts in whatever pulse the tracker locked onto, so a wrong octave changes the
+cycle it can see: on a double-time grid a 4/4 bar is 8 pulses (harmless once the pulse
+unit is set to eighths), on a half-time grid a 7/8 disappears. Tempogram strength does
+not settle it — on a 91 BPM soul track the 182 BPM reading scored stronger. What the
+tools do instead:
+- `foundation.py pulse` flags a pulse above 160 BPM as probably eighth notes and one
+  below 70 as possibly half-time; `--min-bpm`/`--max-bpm` force the other octave.
+- `detect_meter.py` re-sweeps on a 2× grid when it is INCONCLUSIVE or the pulse is slow,
+  and warns when successive beat intervals run 3:2 (aksak read as uneven beats).
+- `foundation.py meter` asks "eighth or quarter?" for every cycle when the pulse is fast.
+
 **Keep madmom as the pulse source.** beat_this (CPJKU, 2024) was tested as a replacement
 on seven songs: its grid turned a verified 11/8 into a LOW-confidence 25, read a 4/4 song
 at half tempo, and sent two correct results to INCONCLUSIVE; it only tied on the rest. Its

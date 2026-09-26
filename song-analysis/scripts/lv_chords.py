@@ -76,13 +76,24 @@ def main():
                                     Counter(c["chord"] for c in cells).most_common(8)))
 
     disagree = []
+    for c in cells:                                  # status: how far to trust this cell
+        c["status"] = "unchecked" if not a.compare else "agree"
+        if c["coverage"] < 0.5:
+            c["status"] = "change-inside"
     if a.compare:
         tri = {(c["bar"], c["cell"]): c for c in json.load(open(a.compare))["cells"]}
         for c in cells:
             t = tri.get((c["bar"], c["cell"]))
-            if t and root_pc(t["chord"]) is not None and root_pc(c["chord"]) is not None \
+            if not t:
+                continue
+            if root_pc(t["chord"]) is not None and root_pc(c["chord"]) is not None \
                     and root_pc(t["chord"]) != root_pc(c["chord"]):
                 disagree.append((c["bar"], c["cell"], c["chord"], t["chord"]))
+                c["status"] = "root-disagree"
+            elif c["status"] == "agree" and t.get("margin", 1) < 0.01:
+                c["status"] = "near-tie"
+        st = Counter(c["status"] for c in cells)
+        print("cell status: " + ", ".join(f"{k} {v}" for k, v in st.most_common()))
         print(f"root disagreements with the triad cross-check: {len(disagree)}/{len(cells)}"
               + (" - check these by ear" if disagree else ""))
         for d in disagree[:12]:

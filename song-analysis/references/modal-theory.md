@@ -29,6 +29,9 @@ For bass-only charts this is fine (bass plays just the root). For full chord cha
 
 ## Mode test — measure the characteristic degree
 
+Scripted as `scripts/mode_test.py` (tonic from `bass_notes.py`, per-section with
+`sections.json`); the snippet below is the core of it.
+
 Key estimators (Krumhansl, the madmom CNN) know only major and minor, so a mode has to be
 measured, not looked up:
 
@@ -60,6 +63,10 @@ this settled E Lydian outright: A♯ over A, D♯ over D and G♯ over G in 30 o
 A split count means the degree moves (a passing tone, or modal mixture) — say so. If
 neither candidate carries energy, that axis is **undetermined** (a drone with no 6th
 cannot be Dorian or Aeolian) — don't fill it in.
+
+A degree only votes in a bar where it actually sounds (≥ 10% of the bar's chord-tone
+energy) — otherwise leakage from a neighbouring chord tone decides the duel. Bins are
+12-TET: on microtonal chant a degree's energy can split between bins.
 
 Cross-check with a **duration-weighted** pitch-class profile from the transcribed notes
 (total sounding time per pitch class). Note *counts* mislead: many short passing notes
