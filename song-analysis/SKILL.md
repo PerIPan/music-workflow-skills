@@ -93,7 +93,9 @@ It warns when successive beat intervals run in a 3:2 ratio: the tracker may be f
 aksak groups (2+2+3) as uneven beats.
 
 `foundation.py meter` then writes `beats_per_bar`, `pulse_unit`, `time_signature`,
-`grouping`, `downbeat_times`, `num_bars`, `bar_bpm`, `tempo_drift_pct` and `live_tempo`.
+`grouping`, `downbeat_times`, `num_bars`, `bar_bpm`, `tempo_drift_pct` (spread of the middle
+90% of bars), `tempo_outlier_bars` (more than 5% off) and `live_tempo`. A tracker that drops
+a tempo octave for a stretch is repaired in Phase 1 (`grid_repair` lists where).
 **It stops with a question instead of guessing** — put that question to the user and
 re-run with their answer: INCONCLUSIVE (count along), a phrase-length cycle (8/16 → 4/4?),
 a bare duple (2/4 or 4/4?), two equally strong accents (which one is beat 1?), or an odd

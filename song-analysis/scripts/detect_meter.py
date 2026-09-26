@@ -91,24 +91,24 @@ def band_pulse_strength(y, sr, bt, beat, lo, hi):
 
 
 def sweep(ps, pmax):
-    """For every period, the best phase alignment and its accent contrast."""
+    """For every period, the folded accent profile and its contrast (max / min).
+
+    One fold per period is enough: folding from another starting pulse only rotates
+    the profile, and max / min doesn't change under rotation - so phase is 0 and
+    the downbeat is read from the profile's strongest position instead.
+    """
+    ps = np.asarray(ps, float)
     x = ps - ps.mean()
     ac = np.correlate(x, x, "full")[len(x) - 1:]
     ac = ac / max(ac[0], 1e-9)
+    idx = np.arange(len(ps))
     rows = []
     for P in range(2, pmax + 1):
-        best = None
-        for ph in range(P):
-            acc = np.zeros(P); cnt = np.zeros(P)
-            for i, v in enumerate(ps):
-                k = (i - ph) % P
-                acc[k] += v; cnt[k] += 1
-            prof = acc / np.maximum(cnt, 1)
-            c = float(prof.max() / max(prof.min(), 1e-9))
-            if best is None or c > best[0]:
-                best = (c, ph, prof)
-        rows.append(dict(period=P, contrast=round(best[0], 2), phase=best[1],
-                         profile=[round(float(v), 3) for v in best[2]],
+        k = idx % P
+        prof = np.bincount(k, weights=ps, minlength=P) / np.maximum(np.bincount(k, minlength=P), 1)
+        c = float(prof.max() / max(prof.min(), 1e-9))
+        rows.append(dict(period=P, contrast=round(c, 2), phase=0,
+                         profile=[round(float(v), 3) for v in prof],
                          autocorr=round(float(ac[P]), 3) if P < len(ac) else 0.0))
     return rows
 
@@ -130,7 +130,8 @@ def verdict(rows, label):
     def related(q):
         return q % fund == 0 or fund % q == 0 or gcd(q, fund) >= 3
     rival = next((r for r in ranked if not related(r["period"])), None)
-    margin = win["contrast"] / rival["contrast"] if rival else float("inf")
+    # a silent band folds to all zeros: no rival contrast means nothing to beat
+    margin = win["contrast"] / rival["contrast"] if rival and rival["contrast"] > 0 else float("inf")
     print(f"\n  [{label}] top periods by accent contrast:")
     for r in ranked[:6]:
         tag = ""

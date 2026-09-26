@@ -70,7 +70,7 @@ Small samples — read them as evidence, not as a leaderboard.
 | Meter consistent with the true bar (bar or 2–4-bar phrase) | 3 of 4; 1 inconclusive, 0 wrong | 4 songs |
 | Grouping of a verified 11/8 | 6+5 offered (as the alternative; player chose) | 1 |
 | Mode of a verified Lydian drone | E Lydian, ♯4 in 32/32 bars | 1 |
-| Chords, lv-chordia, maj/min | 73–95% (static maj7 drone lowest) | 3 songs |
+| Chords, lv-chordia, maj/min | 73–96% (static maj7 drone lowest) | 3 songs |
 | Lyric word error, best of stem/mix | 17.9% (stem 19.8%, mix 23.6%) | 6 songs, 1,809 words |
 | Lyric line starts within 1 s | 83% (median error ~0.5 s) | 263 lines |
 | Section starts within 2 s | 98% | 6 songs |

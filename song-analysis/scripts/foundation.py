@@ -27,12 +27,42 @@ def ask(msg):
     sys.exit(f"NEEDS A DECISION: {msg}")
 
 
+def repair_grid(beats):
+    """Fill beat gaps of ~2x or ~3x the median interval (a tracker octave switch).
+
+    madmom can drop to half time for a stretch - one song's grid went half-time for
+    100 s, turning 19 of 73 bars into double bars. Gaps of 1.8-2.25x get one beat
+    inserted, 2.7-3.3x get two; the 1.5x (3:2) gaps of aksak groupings are left
+    alone. Assumes most of the song is tracked at the right rate (the median).
+    """
+    import numpy as np
+    beats = np.asarray(beats, float)
+    ibi = np.diff(beats)
+    med = float(np.median(ibi))
+    out, spans = [beats[0]], []
+    for b0, b1, g in zip(beats[:-1], beats[1:], ibi):
+        n = 2 if 1.8 <= g / med <= 2.25 else 3 if 2.7 <= g / med <= 3.3 else 1
+        out.extend(b0 + g * j / n for j in range(1, n))
+        out.append(b1)
+        if n > 1:
+            if spans and b0 - spans[-1][1] <= 3 * med:
+                spans[-1][1] = b1
+            else:
+                spans.append([b0, b1])
+    return np.array(out), len(out) - len(beats), spans
+
+
 def cmd_pulse(a):
     import numpy as np
     from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
     from madmom.features.key import CNNKeyRecognitionProcessor, KEY_LABELS
     beats = DBNBeatTrackingProcessor(fps=100, min_bpm=a.min_bpm, max_bpm=a.max_bpm)(
         RNNBeatProcessor()(a.audio))                                # beats only, no bars
+    inserted, spans = 0, []
+    if not a.no_repair:
+        beats, inserted, spans = repair_grid(beats)
+        for s0, s1 in spans:
+            print(f"GRID REPAIR: filled beats {s0:.1f}-{s1:.1f}s (tracker dropped a tempo octave)")
     probs = CNNKeyRecognitionProcessor()(a.audio)[0]
     key_top2 = [[KEY_LABELS[i], round(float(probs[i]), 2)] for i in np.argsort(probs)[::-1][:2]]
     bpm = round(60.0 / float(np.median(np.diff(beats))), 2)
@@ -41,7 +71,9 @@ def cmd_pulse(a):
               else "ok")
     F = dict(audio=a.audio, pulse_bpm=bpm, tempo_octave=octave,
              beat_times=[round(float(b), 4) for b in beats], key_top2=key_top2, step="pulse",
-             provenance=dict(pulse="measured (madmom DBN, %g-%g BPM)" % (a.min_bpm, a.max_bpm),
+             grid_repair=dict(inserted=inserted, spans=[[round(x, 2) for x in s] for s in spans]),
+             provenance=dict(pulse="measured (madmom DBN, %g-%g BPM)" % (a.min_bpm, a.max_bpm)
+                             + (f"; {inserted} beats filled in" if inserted else ""),
                              key_top2="measured (madmom CNN; melody's key)"))
     json.dump(F, open(a.out, "w"), indent=1)
     if octave != "ok":
@@ -115,7 +147,10 @@ def cmd_meter(a):
         inside = [b for b in bt if d0 <= b <= d1]
         gaps = sorted(y - x for x, y in zip(inside[:-1], inside[1:]))
         bar_bpm.append(round(60.0 / gaps[len(gaps) // 2], 2))
-    med = sorted(bar_bpm)[len(bar_bpm) // 2]
+    srt = sorted(bar_bpm)
+    med = srt[len(srt) // 2]
+    pct = lambda q: srt[min(len(srt) - 1, int(q * len(srt)))]
+    outliers = [i + 1 for i, v in enumerate(bar_bpm) if abs(v / med - 1) > 0.05]
     conf = (f"measured (sweep, {cons.get('confidence', '?')} {cons.get('margin', '?')}x)"
             if cons else None)
     prov = dict(F.get("provenance", {}))
@@ -130,7 +165,10 @@ def cmd_meter(a):
     F.update(provenance=prov, beats_per_bar=cycle, pulse_unit=unit, time_signature=f"{cycle}/{unit}",
              grouping=grouping, downbeat_pulse=dp, pickup_pulses=dp,
              downbeat_times=downbeats, num_bars=len(downbeats) - 1, bar_bpm=bar_bpm,
-             tempo_drift_pct=round((max(bar_bpm) - min(bar_bpm)) / med * 100, 1),
+             # spread of the middle 90% of bars: one ritardando bar shouldn't make a
+             # steady song look like it drifts - those are listed separately
+             tempo_drift_pct=round((pct(0.95) - pct(0.05)) / med * 100, 1),
+             tempo_outlier_bars=outliers,
              live_tempo=round(med * 4 / unit, 3), step="meter")
     json.dump(F, open(a.foundation, "w"), indent=1)
     print(f"{cycle}/{unit} as {'+'.join(map(str, grouping))}, {F['num_bars']} bars from "
@@ -138,6 +176,9 @@ def cmd_meter(a):
           f"(drift {F['tempo_drift_pct']}%); Live tempo {F['live_tempo']}")
     if F["tempo_drift_pct"] > 3:
         print("  drift > 3%: place notes through the beat grid, not one BPM")
+    if outliers:
+        print(f"  bars more than 5% off the median tempo: {outliers[:12]}"
+              f"{' ...' if len(outliers) > 12 else ''} (ritardando, fermata or a tracking slip)")
 
 
 def main():
@@ -148,6 +189,7 @@ def main():
     p.add_argument("--out", default="analysis/foundation.json")
     p.add_argument("--min-bpm", type=float, default=55.0, help="force a faster tempo octave")
     p.add_argument("--max-bpm", type=float, default=215.0, help="force a slower tempo octave")
+    p.add_argument("--no-repair", action="store_true", help="keep madmom's grid as tracked")
     m = sub.add_parser("meter")
     m.add_argument("--foundation", default="analysis/foundation.json")
     m.add_argument("--meter", default="analysis/meter.json")

@@ -25,6 +25,19 @@ don't read extensions beyond 7ths off it. The accuracy figures in its README are
 the paper. It reported the static-Emaj7 track's intro and outro as F♯7/F♯maj7 — either an
 error or a real change; ask the player.
 
+## Trials not adopted yet
+
+- **BTC as a second opinion** (ISMIR 2019, MIT, runs in the lv-chordia venv, ~2 s per
+  song). Weaker alone (maj/min 62–94% vs lv-chordia's 73–96% on the same songs), but where
+  the two *agree*, lv-chordia was right 97% of the time vs 56% where they disagree — and on
+  disagreements one of the two was right 86% of the time on two songs. So its value is a
+  flag ("listen here, candidates X or Y"), never a vote. Held until more songs with
+  human-verified per-bar truth confirm it (3 songs ≈ 22 independent stretches so far).
+  Its "N" (no chord) on sparse intros is a signal of its own, not a chord reading.
+- **Consensus across repeated sections** (majority label per position over 3+ repeats).
+  Only gained ~3 cells on one song, against a truth it matches by construction; no effect
+  on the one song with independent truth. Held.
+
 ## The triad method (`scripts/chord_proposal.py`) — cross-check
 
 ### Method (per cell, on the `other.wav` stem)

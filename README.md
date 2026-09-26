@@ -113,7 +113,7 @@ details in [COMPARISON.md](docs/COMPARISON.md#measured-numbers-local-benchmark))
 
 - meter consistent with the true bar on 3 of 4 songs, none wrong (1 inconclusive)
 - a verified Lydian drone named E Lydian, ♯4 in 32 of 32 bars
-- chords 73–95% major/minor agreement per song
+- chords 73–96% major/minor agreement per song
 - lyrics 17.9% word error; 83% of line starts within 1 s; 98% of sections within 2 s
 
 Run it yourself with `song-analysis/bench/run_bench.py` against your own verified songs

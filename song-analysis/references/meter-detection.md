@@ -79,6 +79,10 @@ tools do instead:
 - `detect_meter.py` re-sweeps on a 2× grid when it is INCONCLUSIVE or the pulse is slow,
   and warns when successive beat intervals run 3:2 (aksak read as uneven beats).
 - `foundation.py meter` asks "eighth or quarter?" for every cycle when the pulse is fast.
+- `foundation.py pulse` fills beat gaps of ~2× or ~3× the median interval: madmom sometimes
+  drops a tempo octave for a stretch (one song: 100 s at half time, 19 of 73 bars double
+  length; repaired, chord accuracy rose 94.5 → 95.8%). 3:2 gaps (aksak) are left alone;
+  `--no-repair` keeps the raw grid.
 
 **Keep madmom as the pulse source.** beat_this (CPJKU, 2024) was tested as a replacement
 on seven songs: its grid turned a verified 11/8 into a LOW-confidence 25, read a 4/4 song
@@ -88,6 +92,16 @@ from a beat tracker's downbeats.
 
 **A song with no percussion and no articulated bass cannot be metered this way** — say so
 and ask the user to count, rather than straining a stem for an answer it doesn't contain.
+
+## Meter changes inside a song — not detected yet
+
+The sweep reports one meter per song. Windowing it naively fails: with only a few folds
+per window, long periods win by chance (0 of 18 synthetic 7/8 bridges found). Normalising
+each period's contrast against shuffled copies of the window found 13 of 18 (all 6-bar
+bridges, 4 of 9 4-bar ones) with no false alarms on four single-meter songs — promising,
+but tuned on clicks. Until real songs with known meter changes are in the benchmark: when a
+section feels different, ask the user to count it, and run the sweep on that section's
+beats alone.
 
 ## Calibration — the meter you never tested for looks like no meter at all
 
