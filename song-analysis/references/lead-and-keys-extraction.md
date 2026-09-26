@@ -8,7 +8,10 @@ can pull them apart again.
 
 1. **Separate with 6 stems:** `demucs -n htdemucs_6s -d mps -o stems <song>` →
    `guitar.wav`, `piano.wav` (plus the usual four). Take nothing else from this run —
-   bass still comes from `htdemucs_ft`.
+   bass still comes from `htdemucs_ft`. Heavier alternative: **BS-RoFormer-SW** via
+   `audio-separator` (6 stems incl. a real piano and guitar stem; 699 MB model, licence
+   undeclared). On an M3 it ran at 0.67× real time and gave the chord step no gain (92.1 vs
+   91.5%), so use it only when an isolated piano/guitar line matters.
 2. **basic-pitch** on the stem. It is polyphonic and over-detects (overtones, strums):
    expect thousands of raw notes for a full song.
 3. **Floor at the instrument's real range.** basic-pitch invents notes at exact octaves

@@ -51,6 +51,12 @@ at twice the tracked pulse, the tracker is reading half-time: re-run on the doub
 because a cycle of 8 there shows up as 4 here. Check the tempo octave *before* trusting
 any cycle length.
 
+**Keep madmom as the pulse source.** beat_this (CPJKU, 2024) was tested as a replacement
+on seven songs: its grid turned a verified 11/8 into a LOW-confidence 25, read a 4/4 song
+at half tempo, and sent two correct results to INCONCLUSIVE; it only tied on the rest. Its
+downbeat head was chaotic on the 11/8 song (1–6 beats per "bar") — never take bar length
+from a beat tracker's downbeats.
+
 **A song with no percussion and no articulated bass cannot be metered this way** — say so
 and ask the user to count, rather than straining a stem for an answer it doesn't contain.
 

@@ -114,7 +114,8 @@ demucs -n htdemucs_ft -d mps -o stems <song.mp3>
   the Hugging Face cache). `htdemucs_ft` is 4 × 84 MB; uncached, it downloads silently —
   ~100 min at 3 MB/min once — and piping through `tail` hides all progress.
 - **Fast offline fallback:** `mlx-demucs` (plain htdemucs, not `_ft`; 28 s for a 4-minute
-  track). Call its venv binary directly — `uv run mlx-demucs` re-resolves dependencies and
+  track). For `_ft` itself, torch with `-d mps` beat the MLX port (66 s vs 96 s on a
+  2-minute song, same output within ~22–29 dB). Call its venv binary directly — `uv run mlx-demucs` re-resolves dependencies and
   hangs for 10+ minutes.
 - **Quality check:** listen to `bass.wav` alone — piano/guitar bleed means separation
   struggled.
@@ -162,9 +163,10 @@ def locate(t, downbeats, beats_per_bar):     # from foundation.json — never as
 ## Phase 5 — Sections (from lyrics + audio)
 
 For each canonical lyric line, find its first bar via the word timings + `locate()`.
-Section boundaries = where each labelled section's first line lands. Don't trust automatic
-section detection (±1 bar off around bridges and outros); lyrics + word timing are far
-more reliable.
+Section boundaries = where each labelled section's first line lands. Automatic
+segmentation can *suggest* boundaries, never decide them: `as_seg` (barwise CBM, fed this
+song's own bars, `penalty_weight=0`) hit 80% of lyric-anchored boundaries within ±1 bar on
+one reference song but only 27% within ±0.5 s; the MLX port of all-in-one reached 43%.
 
 ## Phase 5b — Chords (lv-chordia, cross-checked)
 

@@ -81,7 +81,10 @@ t, freq, conf, _ = crepe.predict(y16, 16000, model_capacity='full', viterbi=True
 ```
 
 `full` + viterbi is deterministic on CPU. Expect more notes than pyin, including breaths
-and glottal onsets — post-filter sub-100 ms notes.
+and glottal onsets — post-filter sub-100 ms notes. CREPE `full` runs at ~1× real time; for
+a quick preview, **SwiftF0** (`swift-f0==0.3.0`, ONNX, ~250× real time) agrees with it within
+50 cents on 97–99% of frames both call voiced — but it voices only 27–80% of the frames
+CREPE does, dropping exactly the quiet, sparse singing CREPE was chosen for.
 
 ## 2c. Octave cross-check (when a line looks wrong, or on drone material)
 
