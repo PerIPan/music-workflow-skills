@@ -27,6 +27,28 @@ def root_pc(label):
     return NOTES.get(name)
 
 
+_TEMP_WAVS = []
+
+
+def decodable(path):
+    """librosa >= 1.0 decodes only what libsndfile reads (wav/flac/ogg/mp3); 0.11 fell back
+    to audioread. Transcode anything else (m4a, aac, webm, mp4) to a temp wav with ffmpeg;
+    the temp files are removed when the script exits."""
+    import soundfile as sf
+    try:
+        sf.info(path)
+        return path
+    except Exception:
+        import atexit, os, subprocess, tempfile
+        fd, out = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, out], check=True)
+        if not _TEMP_WAVS:
+            atexit.register(lambda: [os.remove(p) for p in _TEMP_WAVS if os.path.exists(p)])
+        _TEMP_WAVS.append(out)
+        return out
+
+
 def cells_of(downbeats, grouping):
     bpb = sum(grouping)
     edges = [0]
@@ -55,7 +77,7 @@ def main():
                  "'grouping' (4/4 -> [2, 2]) or pass --grouping. Never assume 4/4.")
 
     from lv_chordia import chord_recognition      # heavy import: after arg checks
-    segs = chord_recognition(a.audio, a.vocab)
+    segs = chord_recognition(decodable(a.audio), a.vocab)
 
     cells = []
     for bar, cell, t0, t1 in cells_of(F["downbeat_times"], grouping):

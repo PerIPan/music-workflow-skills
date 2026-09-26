@@ -27,7 +27,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("analysis", nargs="?", default="analysis")
     ap.add_argument("--check-cache", action="store_true",
-                    help="also check the htdemucs_ft weights are cached (demucs 4.0.1)")
+                    help="also check the htdemucs_ft weights are cached (HF hub for demucs 4.1, torch hub for 4.0)")
     a = ap.parse_args()
     A = Path(a.analysis)
     rd = lambda n: json.load(open(A / n)) if (A / n).exists() else None
@@ -84,10 +84,14 @@ def main():
         monotonic([s["t"] for s in S["sections"]], "sections.json")
 
     if a.check_cache:
-        cache = Path(os.path.expanduser("~/.cache/torch/hub/checkpoints"))
         ft = ["f7e0c4bc", "d12395a8", "92cfc3b6", "04573f0d"]
-        have = [h for h in ft if any(p.name.startswith(h) and p.suffix == ".th"
-                                     for p in cache.glob("*.th"))] if cache.exists() else []
+        hub = Path(os.environ.get("HF_HUB_CACHE") or Path(os.environ.get(
+            "HF_HOME", os.path.expanduser("~/.cache/huggingface"))) / "hub")
+        dirs = [Path(os.path.expanduser("~/.cache/torch/hub/checkpoints")),     # demucs 4.0.x
+                *(hub / "models--adefossez--HTDemucs-ft" / "snapshots").glob("*")]  # 4.1.x
+        names = [p.name for d in dirs if d.is_dir() for p in d.iterdir()]
+        have = [h for h in ft if any(n.startswith(h) and n.endswith((".th", ".safetensors"))
+                                     for n in names)]
         if len(have) < 4:
             warn(f"htdemucs_ft: {4 - len(have)} of 4 checkpoints not cached - demucs will "
                  f"download ~{84 * (4 - len(have))} MB silently")

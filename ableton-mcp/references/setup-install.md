@@ -58,7 +58,7 @@ the server from the same checkout as the Remote Script:
 ```json
 { "mcpServers": {
     "ableton": { "type": "stdio", "command": "uvx",
-                 "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.4.1",
+                 "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.12.2",
                           "ableton-mcp"],
                  "env": {} }
 } }
@@ -68,14 +68,32 @@ the server from the same checkout as the Remote Script:
 (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 ```json
 { "mcpServers": { "AbletonMCP": { "command": "uvx",
-    "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.4.1", "ableton-mcp"] } } }
+    "args": ["--from", "/path/to/ableton-mcp", "--with", "mcp[cli]==1.12.2", "ableton-mcp"] } } }
 ```
 
 Restart the client. Notes:
 - `uvx` not on PATH → use its absolute path (e.g. `~/.local/bin/uvx`).
 - Don't use bare `"args": ["ableton-mcp"]` — that installs the PyPI package (the original
   37-tool server), which won't match the fork's Remote Script.
-- The `mcp[cli]==1.4.1` pin avoids an `mcp` import error in newer releases.
+- **MCP SDK version.** The fork as published runs unchanged up to `mcp[cli]==1.12.2`
+  (tested: all 128 tools, protocol 2025-06-18, live calls OK). 1.12.3–1.30 fail with
+  `FastMCP.__init__() got an unexpected keyword argument 'description'`; 2.x renamed FastMCP
+  to MCPServer and runs tool calls concurrently. A small patch to `MCP_Server/server.py`
+  runs it on the **latest 1.x (1.30.0, tested live)**: import `MCPServer as FastMCP` when
+  available (else `FastMCP`), pass `instructions=` instead of `description=`, and hold a
+  lock around `send_command` so concurrent calls don't interleave on the socket. SDK 2.x
+  still fails with that patch — not supported yet.
+- **If you patch the server locally, don't run it with `uvx --from <folder>`.** uv caches a
+  built environment for a local folder and keeps running it after the code changes (even
+  `--reinstall-package` reused the old build). Install it editable in its own venv and
+  point the client at the binary — edits are live, startup is fast and offline:
+  ```bash
+  uv venv --python 3.12 .venv-ableton-mcp
+  uv pip install --python .venv-ableton-mcp/bin/python -e /path/to/ableton-mcp "mcp[cli]==1.30.0"
+  ```
+  ```json
+  "ableton": { "type": "stdio", "command": "/path/to/.venv-ableton-mcp/bin/ableton-mcp", "args": [] }
+  ```
 - Keep API keys for other servers out of `.mcp.json` literals — reference an environment
   variable instead, since the file often ends up committed.
 

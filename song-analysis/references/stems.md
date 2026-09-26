@@ -5,15 +5,24 @@ Read this when Phase 2 is slow, a model isn't cached, or a stem sounds wrong.
 ## Default: `htdemucs_ft` on the GPU
 
 ```bash
-demucs -n htdemucs_ft -d mps -o stems <song.mp3>     # demucs 4.0.1, torch 2.4.1
+ffmpeg -v error -i <song.mp3> -c:a pcm_s16le /tmp/<song>.wav
+demucs -n htdemucs_ft -d mps -o stems /tmp/<song>.wav     # demucs 4.1.0, torch 2.14.0
 ```
 
-- **`-d mps` on Apple Silicon.** demucs 4.0.1 defaults to CUDA-else-CPU, so without the
-  flag it runs on the CPU. Measured on an M3 (30 s clip): CPU 64.5 s, MPS 23.0 s, stems
-  within noise of each other.
+- **Decode MP3 to WAV first.** demucs 4.1 reads MP3 with `sphn`, which skips the MP3
+  encoder-delay trim: every stem starts 1105 samples (25 ms) late and runs long against the
+  mix as librosa, soundfile, ffmpeg and demucs 4.0 read it. WAV input lines up exactly.
+  The output folder is still named after the file stem.
+- **Same model as 4.0.** 4.1 loads `htdemucs_ft` from Hugging Face
+  (`~/.cache/huggingface/hub/models--adefossez--HTDemucs-ft`, 4 × 84 MB); the weights are
+  bit-identical to 4.0's `.th` files, and separation matches within random-shift noise.
+  It used about 3.5× less CPU and 20% less memory on a 4-minute song. Set
+  `HF_HUB_OFFLINE=1` after the first download to skip the hub check.
+- **`-d mps` on Apple Silicon** (4.1 picks MPS by default; 4.0 needed the flag — measured
+  on an M3, 30 s clip: CPU 64.5 s, MPS 23.0 s).
 - **Meter-only runs** need just the drums: `--two-stems=drums`.
-- **Cache check first:** `du -sh ~/.cache/torch/hub/checkpoints` (4.0.1; 4.1.x loads from
-  the Hugging Face cache). `htdemucs_ft` is a bag of 4 models, 4 × 84 MB. Uncached, the
+- **Cache check first:** `validate_artifacts.py --check-cache` looks in both the Hugging Face
+  cache (4.1) and `~/.cache/torch/hub/checkpoints` (4.0). `htdemucs_ft` is a bag of 4 models, 4 × 84 MB. Uncached, the
   command downloads silently for as long as the connection takes — ~100 min at 3 MB/min
   once — and piping through `tail` hides all progress. Don't assume it's cached because
   it was used on a previous song.
@@ -22,7 +31,7 @@ demucs -n htdemucs_ft -d mps -o stems <song.mp3>     # demucs 4.0.1, torch 2.4.1
 
 | Option | Speed (M3) | Use when |
 |---|---|---|
-| `htdemucs_ft -d mps` (torch) | 66 s for a 2-min song | default |
+| `htdemucs_ft -d mps` (demucs 4.1, torch 2.14) | 66 s for a 2-min song (4.0; 4.1 ~17% faster) | default |
 | `mlx-demucs` (plain htdemucs) | 28 s for a 4-min song | batches; quality slightly below `_ft` |
 | `demucs-mlx -n htdemucs_ft` | 96 s for the same 2-min song | never — slower than torch MPS, same output (22–29 dB SNR) |
 | `htdemucs_6s` | — | isolating guitar/piano only; never for bass (bleeds keys into it) |

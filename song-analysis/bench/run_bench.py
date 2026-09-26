@@ -163,8 +163,8 @@ def score_song(song, root, tasks):
         got = [l.get("start") for l in rd("lyrics_aligned.json")["lines"]]
         n = min(len(truth), len(got))
         err = [abs(got[i] - truth[i]["start"]) for i in range(n) if got[i] is not None]
-        res["lines"] = dict(n=n, within_0_5s=round(100 * np.mean([e <= 0.5 for e in err]), 1),
-                            within_1s=round(100 * np.mean([e <= 1.0 for e in err]), 1),
+        res["lines"] = dict(n=n, within_0_5s=round(100 * float(np.mean([e <= 0.5 for e in err])), 1),
+                            within_1s=round(100 * float(np.mean([e <= 1.0 for e in err])), 1),
                             median_err_s=round(float(np.median(err)), 2)) if err else None
     return res
 

@@ -41,6 +41,28 @@ MIN_MARGIN = 1.3
 CONVENTION = {2: [2], 3: [3], 4: [2, 2], 6: [3, 3], 8: [4, 4], 9: [3, 3, 3], 12: [3, 3, 3, 3]}
 
 
+_TEMP_WAVS = []
+
+
+def decodable(path):
+    """librosa >= 1.0 decodes only what libsndfile reads (wav/flac/ogg/mp3); 0.11 fell back
+    to audioread. Transcode anything else (m4a, aac, webm, mp4) to a temp wav with ffmpeg;
+    the temp files are removed when the script exits."""
+    import soundfile as sf
+    try:
+        sf.info(path)
+        return path
+    except Exception:
+        import atexit, os, subprocess, tempfile
+        fd, out = tempfile.mkstemp(suffix=".wav")
+        os.close(fd)
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, out], check=True)
+        if not _TEMP_WAVS:
+            atexit.register(lambda: [os.remove(p) for p in _TEMP_WAVS if os.path.exists(p)])
+        _TEMP_WAVS.append(out)
+        return out
+
+
 def grouping_from(rows, P):
     """Downbeat + main split of cycle P from one band's sweep rows.
 
@@ -193,7 +215,7 @@ def analyse(bt, beat, y, sr, stems, pmax, quiet=False):
         say("  (a song with no kit still articulates its cycle through pitch)")
         for nm, path in (("bass", stems.get("bass")), ("harmonic", stems.get("other"))):
             if not path: continue
-            yy, _ = librosa.load(path, sr=22050, mono=True)
+            yy, _ = librosa.load(decodable(path), sr=22050, mono=True)
             lo, hi = FALLBACK[nm]
             run(nm, sweep(band_pulse_strength(yy, sr, bt, beat, lo, hi), pmax))
     tested = len(verdicts)
@@ -236,7 +258,7 @@ def main():
 
     bt, beat = pulse_grid(a.audio, a.foundation)
     src = a.drums or a.audio
-    y, sr = librosa.load(src, sr=22050, mono=True)
+    y, sr = librosa.load(decodable(src), sr=22050, mono=True)
     bpm = 60 / beat
     print(f"pulse {bpm:.1f} BPM ({beat*1000:.0f} ms), {len(bt)} pulses, "
           f"source {'drums stem' if a.drums else 'full mix'}")

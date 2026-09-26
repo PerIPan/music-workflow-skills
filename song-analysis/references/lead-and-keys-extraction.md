@@ -6,7 +6,8 @@ can pull them apart again.
 
 ## Pipeline
 
-1. **Separate with 6 stems:** `demucs -n htdemucs_6s -d mps -o stems <song>` →
+1. **Separate with 6 stems:** decode to WAV first (`ffmpeg -i <song.mp3> -c:a pcm_s16le
+   /tmp/<song>.wav`), then `demucs -n htdemucs_6s -d mps -o stems /tmp/<song>.wav` →
    `guitar.wav`, `piano.wav` (plus the usual four). Take nothing else from this run —
    bass still comes from `htdemucs_ft`. Heavier alternative: **BS-RoFormer-SW** via
    `audio-separator` (6 stems incl. a real piano and guitar stem; 699 MB model, licence

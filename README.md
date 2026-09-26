@@ -122,8 +122,10 @@ Run it yourself with `song-analysis/bench/run_bench.py` against your own verifie
 ## Requirements
 
 - Apple Silicon Mac (tested on a base M3, 16 GB); CUDA works for stems
-- Python 3.10 and 3.11 virtualenvs (madmom, librosa, basic-pitch, crepe, demucs,
-  lv-chordia, mlx-whisper), about 2 GB of models
+- [uv](https://docs.astral.sh/uv/) and ffmpeg
+- Python 3.12 virtualenvs on current releases — NumPy 2.5, librosa 1.0, madmom (latest),
+  TensorFlow 2.21, demucs 4.1, torch 2.14, lv-chordia 1.1, mlx-whisper 0.4 — about 2 GB of
+  models; exact pins in the environment reference
 - For the Live skills: Ableton Live 11/12 and the AbletonMCP Remote Script
 
 ## Tests

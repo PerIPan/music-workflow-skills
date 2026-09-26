@@ -208,9 +208,9 @@ the Live Object Model has no API for meter changes along the Arrangement.
 
 ## Local environment (this machine)
 
-- `.mcp.json` already configured in `~/dev/abletonAI/` (server `ableton` via
-  `uvx --from <that dir>/ableton-mcp --with mcp[cli]==1.4.1 ableton-mcp`); Remote Script
-  from the same checkout installed.
+- `.mcp.json` in `~/dev/abletonAI/` runs `~/dev/abletonAI/.venv-ableton-mcp/bin/ableton-mcp`:
+  the fork installed editable (branch `mcp-sdk-compat`, SDK 1.30.0 — see setup-install.md);
+  Remote Script from the same checkout installed.
 - Recording session output to audio: empty-slot record needs a UI click — use Resample
   workflow instead.
 - Source doc (read-only): `~/dev/abletonAI/audio-analysis/WORKFLOW-ableton-mcp.md`.

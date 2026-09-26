@@ -65,10 +65,13 @@ with the mode test (`references/modal-theory.md`).
 ## Phase 2 — Stems
 
 ```bash
-demucs -n htdemucs_ft -d mps -o stems <song.mp3>     # → $ST/{bass,drums,vocals,other}.wav
+ffmpeg -v error -i <song.mp3> -c:a pcm_s16le /tmp/<song>.wav     # decode first (see below)
+demucs -n htdemucs_ft -d mps -o stems /tmp/<song>.wav   # → $ST/{bass,drums,vocals,other}.wav
 ```
 
-`-d mps` on Apple Silicon (otherwise CPU, ~3× slower). **Check the model cache first** —
+**Decode MP3 to WAV first:** demucs 4.1 reads MP3 without the gapless trim, so every stem
+starts 25 ms late against the mix — enough to smear bass and beat timing. `-d mps` on Apple
+Silicon (otherwise CPU, ~3× slower). **Check the model cache first** —
 uncached, `htdemucs_ft` downloads 4 × 84 MB silently. Listen to `bass.wav` alone: piano or
 guitar in it means separation struggled. Faster/other options and timings:
 `references/stems.md`.

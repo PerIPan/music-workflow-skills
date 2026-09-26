@@ -9,7 +9,7 @@
    `__init__.py` inside. Missing from the dropdown → check Ableton's **Log.txt** for load
    errors.
 4. **Did the MCP server launch?** Check the client's MCP logs. Failed on an `mcp` import →
-   add the `--with mcp[cli]==1.4.1` pin (see setup-install.md).
+   add the `--with mcp[cli]==1.12.2` pin (see setup-install.md).
 5. **Port conflict:** nothing else may use **TCP 9877**; restart both client and Live.
 
 ## Other failures

@@ -3,7 +3,11 @@
 <text x="48" y="64" fill="#E6EAF0" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="30" font-weight="700" letter-spacing="-0.3">music-workflow-skills</text>
 <text x="48" y="94" fill="#8D98A8" font-family="'Avenir Next','Segoe UI','Helvetica Neue',Helvetica,Arial,sans-serif" font-size="16">a recording → meter · mode · chords · lyrics → a band chart and a Live set</text>
 <rect x="48" y="170" width="118" height="150" rx="12" fill="#171E2B" stroke="#2A3342"/>
-<path d="M78 200 v46 a12 12 0 1 1 -8 -11 V206 l32 -8 v38 a12 12 0 1 1 -8 -11 V207 z" fill="#A79CFF" opacity="0.9"/>
+<ellipse cx="86" cy="258" rx="8.5" ry="6" transform="rotate(-22 86 258)" fill="#A79CFF"/>
+<ellipse cx="124" cy="250" rx="8.5" ry="6" transform="rotate(-22 124 250)" fill="#A79CFF"/>
+<rect x="92.3" y="206" width="2.4" height="50" fill="#A79CFF"/>
+<rect x="130.3" y="198" width="2.4" height="50" fill="#A79CFF"/>
+<polygon points="92.3,206 132.7,198 132.7,203.5 92.3,211.5" fill="#A79CFF"/>
 <text x="107" y="292" text-anchor="middle" fill="#E6EAF0" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="14">song.mp3</text>
 <text x="107" y="310" text-anchor="middle" fill="#8D98A8" font-family="'SF Mono',Menlo,Consolas,'Liberation Mono',monospace" font-size="12">+ lyrics.txt</text>
 <path d="M176 245 H206" stroke="#8D98A8" stroke-width="2" fill="none"/>
