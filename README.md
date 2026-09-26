@@ -4,13 +4,23 @@
 including the odd meters, modes and drones that other analysis tools flatten into 4/4
 major/minor.**
 
-<!-- screenshot: a generated chord+lyric chart, e.g. docs/img/chart.png -->
-
 Give Claude a song and its lyrics. It finds the pulse, sweeps for the meter, separates
 stems, transcribes the bass, names the mode, reads the chords, times the lyrics, and writes
 a chart a band can play from — then, if you want, rebuilds it in Live with the right time
 signature. Everything runs offline on an Apple Silicon Mac, and every step is a script
 with tests.
+
+## The skills
+
+| Skill | Use when |
+|---|---|
+| **`song-analysis`** | A recording has to become tempo, meter, key/mode, stems, bass line, chords per bar, timed lyrics, sections, or a band chart |
+| `song-to-ableton` | You want a song rebuilt, covered or reinterpreted in Live — analysis feeding the build |
+| `bass-transcribe` | You played bass (or sang a line) and want it as MIDI, a Live clip or a tab |
+| `ableton-mcp` | Driving Live over MCP: tracks, clips, notes, devices, mixing, time signature — and the gotchas |
+| `ableton-arrangement` | Arranging in Live: sections, bass and drum patterns in any meter, FX chains, dynamics |
+
+![A recording becomes pulse, an 11/8 meter grouped 6+5, chords on the bar grid, timed lyrics, then a band chart and an Ableton Live clip](docs/img/pipeline.svg)
 
 ## Why it's different
 
@@ -32,6 +42,8 @@ with tests.
 See [how it compares](docs/COMPARISON.md) with 75 other tools, skills and papers.
 
 ## What it looks like
+
+<!-- screenshot: a generated chord+lyric chart, e.g. docs/img/chart.png -->
 
 The meter sweep on a song in 11/8:
 
@@ -57,16 +69,6 @@ tonic E (57% of bass time) -> lydian
   4_vs_#4  wins   0 : 32  -> b
   7_vs_b7  wins  32 : 0   -> a
 ```
-
-## The skills
-
-| Skill | Use when |
-|---|---|
-| **`song-analysis`** | A recording has to become tempo, meter, key/mode, stems, bass line, chords per bar, timed lyrics, sections, or a band chart |
-| `song-to-ableton` | You want a song rebuilt, covered or reinterpreted in Live — analysis feeding the build |
-| `bass-transcribe` | You played bass (or sang a line) and want it as MIDI, a Live clip or a tab |
-| `ableton-mcp` | Driving Live over MCP: tracks, clips, notes, devices, mixing, time signature — and the gotchas |
-| `ableton-arrangement` | Arranging in Live: sections, bass and drum patterns in any meter, FX chains, dynamics |
 
 ## Quick start
 
