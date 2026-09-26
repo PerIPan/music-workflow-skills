@@ -63,7 +63,7 @@ Its code and weights are CC BY-NC-SA — install it, never copy it into a repo.
 
 **Precondition: establish the meter first.** Every pattern below is written in 4/4, and
 reading a 4/4 template onto an odd cycle produces a flat, meaningless histogram — see
-SKILL.md Phase 1b and Trap 3. Run `scripts/detect_meter.py` before this step and fold
+SKILL.md Phase 3 and Trap 3. Run `scripts/detect_meter.py` before this step and fold
 onsets onto the cycle length it returns, not onto 4.
 
 Compare onset positions to beat times:

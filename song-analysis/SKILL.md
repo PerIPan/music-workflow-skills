@@ -10,12 +10,13 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 
 **References (read on demand):**
 - `references/meter-detection.md` — how the meter sweep works, reading its output, calibration
-- `references/chord-proposal.md` — the chord method, the major-bias trap, where it fails
+- `references/stems.md` — separation options, speeds, cache, quality checks
+- `references/chord-proposal.md` — chord benchmark, the triad cross-check, the major-bias trap
 - `references/chart-and-lyrics.md` — chart structure, the lyric-placement rules, HTML output
 - `references/drum-pattern-analysis.md` — kick/snare pattern reading; optional ADTOF
 - `references/modal-theory.md` — the 7 modes and the mode test, power chords, Byzantine ≠ Phrygian
 - `references/lead-and-keys-extraction.md` — isolated guitar/piano lines via `htdemucs_6s`
-- `references/environment-setup.md` — venvs, pinned versions, per-song folder layout
+- `references/environment-setup.md` — venvs, pinned versions, folder layout, this machine
 
 ## Inputs
 
@@ -25,104 +26,84 @@ reinterpretations, drone/devotional). Works for any song, genre, key or meter.
 
 ## Tool per step
 
-| Step | Tool | Notes |
+| Phase | Tool | Output |
 |---|---|---|
-| Pulse (beats only) | **madmom** `DBNBeatTrackingProcessor` | No meter assumed |
-| Meter, grouping, downbeat | **`scripts/detect_meter.py`** | Sweeps every cycle 2–25; odd meters |
-| Key (melody's mode) | **madmom** `CNNKeyRecognitionProcessor` + bass-pedal check | Top-2 with probabilities — Trap 2 |
-| Stems | **demucs `htdemucs_ft`** `-d mps` | `htdemucs_6s` only to isolate guitar/piano — never for bass |
-| Bass → MIDI | **pyin** (`bass-transcribe` skill) | Root line, not chord quality. Not CREPE |
-| Polyphonic parts → MIDI | **basic-pitch** | Floor at the instrument's range |
-| Chords | **`scripts/lv_chords.py`** (lv-chordia), cross-checked by `scripts/chord_proposal.py` | 7ths + inversions; triad method flags disagreements |
-| Lyrics + word timing | **`scripts/whisper_gated.py`** | mlx-whisper turbo, gated on the sung parts |
-| Drum-pattern read | librosa band onsets (ADTOF optional) | see reference |
-| Chart | Python → self-contained **HTML** | see reference |
+| 1 Pulse + key | **`scripts/foundation.py pulse`** (madmom beats + CNN key) | `foundation.json` (step 1) |
+| 2 Stems | **demucs `htdemucs_ft -d mps`** | `stems/htdemucs_ft/<song>/` |
+| 3 Meter | **`scripts/detect_meter.py`** → **`scripts/foundation.py meter`** | `meter.json`, `foundation.json` (step 2) |
+| 4 Bass → MIDI | **pyin** (`bass-transcribe` skill) | `bass.mid`, `bass_per_cell.json` |
+| 5 Lyrics | **`scripts/whisper_gated.py`** | `lyrics.json` |
+| 6 Sections | lyrics + word timing (as_seg may suggest) | section map |
+| 7 Chords | **`scripts/lv_chords.py`**, cross-checked by **`scripts/chord_proposal.py`** | `chords_lv.json`, `chord_proposal.json` |
+| 8 Chart | Python → self-contained **HTML** | chart |
 
-Scripts run with the analysis venv (`<venv>/bin/python`); Whisper and lv-chordia have
-their own venvs.
+`<venv>` = the analysis venv; Whisper and lv-chordia have their own
+(`references/environment-setup.md`). Below, `ST=stems/htdemucs_ft/<song>`.
 
-## Phase 1 — Foundation (pulse + key, then meter)
-
-### 1a. Pulse and key, WITHOUT assuming a meter
-
-```python
-from madmom.features.beats import RNNBeatProcessor, DBNBeatTrackingProcessor
-from madmom.features.key import CNNKeyRecognitionProcessor, KEY_LABELS
-import numpy as np
-
-beat_times = DBNBeatTrackingProcessor(fps=100)(RNNBeatProcessor()(audio_path))  # no bars
-pulse_bpm = 60.0 / float(np.median(np.diff(beat_times)))
-probs = CNNKeyRecognitionProcessor()(audio_path)[0]    # 24 key probabilities
-key_top2 = [(KEY_LABELS[i], round(float(probs[i]), 2)) for i in np.argsort(probs)[::-1][:2]]
-```
-
-**Never pass `beats_per_bar=(3, 4)`** — a constrained candidate list can't say "neither",
-so it returns the least-bad option with full confidence and every bar count inherits it.
-
-**Key: report the top two, then check the bass pedal.** The CNN beats chroma + Krumhansl
-by ~20 MIREX points and fixes relative-major/minor flips, but it knows only 24
-major/minor keys, and its probability is not a confidence on modal or drone material (a
-Lydian track came out as the wrong key at p = 0.59). Take the pitch class the bass
-sustains longest (duration-weighted, after Phase 3): if it disagrees, trust the pedal as
-the tonic and name the mode with the mode test (`references/modal-theory.md`).
-
-### 1b. Meter by sweeping every cycle length (after Phase 2, on the stems)
+## Phase 1 — Pulse and key (no meter assumed)
 
 ```bash
-<venv>/bin/python scripts/detect_meter.py <song.mp3> --drums stems/<song>/drums.wav \
-    --bass stems/<song>/bass.wav --other stems/<song>/other.wav \
-    --foundation analysis/foundation.json --json analysis/meter.json
+<venv>/bin/python scripts/foundation.py pulse <song.mp3> --out analysis/foundation.json
 ```
 
-Folds band-limited onsets onto every period 2–25 and ranks by accent contrast. Always
-pass `--bass` and `--other`: songs without a kit still carry the cycle in the bass and
-harmony. It prints a consensus cycle with HIGH/LOW confidence and the downbeat, or
-**INCONCLUSIVE** — then report the ambiguity and ask the user to count; never pick one.
-A cycle of 8/16/24 is usually 4/4 with a phrase; a prime (7, 11, 13) is the meter; check
-the tempo octave first. Details, output table and calibration:
+Tracks beats with **no bar assumption** — never pass `beats_per_bar=(3, 4)`: a constrained
+candidate list can't say "neither", so it returns the least-bad option with full
+confidence and every bar count inherits it. Writes `pulse_bpm`, `beat_times` and
+`key_top2`.
+
+**Key: the top two are the melody's key, not the tonic.** The madmom CNN beats chroma +
+Krumhansl by ~20 MIREX points and fixes relative-major/minor flips, but knows only 24
+major/minor keys, and its probability is not a confidence on modal or drone material (a
+Lydian track came out as the wrong key at p = 0.59). After Phase 4, take the pitch class
+the bass sustains longest: if it disagrees, trust the pedal as the tonic and name the mode
+with the mode test (`references/modal-theory.md`).
+
+## Phase 2 — Stems
+
+```bash
+demucs -n htdemucs_ft -d mps -o stems <song.mp3>     # → $ST/{bass,drums,vocals,other}.wav
+```
+
+`-d mps` on Apple Silicon (otherwise CPU, ~3× slower). **Check the model cache first** —
+uncached, `htdemucs_ft` downloads 4 × 84 MB silently. Listen to `bass.wav` alone: piano or
+guitar in it means separation struggled. Faster/other options and timings:
+`references/stems.md`.
+
+## Phase 3 — Meter (sweep every cycle, then decide)
+
+```bash
+<venv>/bin/python scripts/detect_meter.py <song.mp3> --drums $ST/drums.wav \
+    --bass $ST/bass.wav --other $ST/other.wav \
+    --foundation analysis/foundation.json --json analysis/meter.json
+<venv>/bin/python scripts/foundation.py meter [--pulse-unit 8] [--use-alternative | --cycle N ...]
+```
+
+The sweep folds band-limited onsets onto every period 2–25 and ranks by accent contrast;
+songs without a kit still carry the cycle in the bass and harmony, so always pass
+`--bass` and `--other`. It reports a cycle, the downbeat (counted with the kick) and the
+main split (`grouping`, e.g. 6+5) — or **INCONCLUSIVE**.
+
+`foundation.py meter` then writes `beats_per_bar`, `pulse_unit`, `time_signature`,
+`grouping`, `downbeat_times`, `num_bars`, `bar_bpm`, `tempo_drift_pct` and `live_tempo`.
+**It stops with a question instead of guessing** — put that question to the user and
+re-run with their answer: INCONCLUSIVE (count along), a phrase-length cycle (8/16 → 4/4?),
+a bare duple (2/4 or 4/4?), two equally strong accents (which one is beat 1?), or an odd
+cycle (eighth or quarter pulse — 11/8 vs 11/4 doubles Live's tempo). Reading the sweep,
+calibration, and why beat trackers' own downbeats aren't used:
 `references/meter-detection.md`.
-
-### Save `analysis/foundation.json`
-
-`pulse_bpm`, `beat_times`, `beats_per_bar` (from 1b, **not** madmom), `pulse_unit` (4 if
-the pulse is a quarter note, 8 if an eighth), `grouping` (the split from the two strongest
-positions, e.g. `[6, 5]`; `[2, 2]` for 4/4), `downbeat_times`
-(`beat_times[downbeat_pulse::cycle]` from `meter.json`), `num_bars`, `key` (top two),
-`bar_bpm` (per bar: 60 / median inter-beat interval, pulse units) and `tempo_drift_pct`
-((max − min) / median of `bar_bpm`).
 
 **Cells.** Everything downstream (bass, chords, lyrics, chart) is keyed by `(bar, cell)`,
 one cell per group in `grouping`: 4/4 → 2+2 (the familiar half-bars), 3/4 → one cell,
 6/8 → 3+3, 11/8 as 6+5 → two unequal cells. Never split an odd bar at its midpoint.
 
-**Sanity checks:** read `bar_bpm`, not one BPM — played music drifts, and above ~±3% a
-single tempo misplaces notes by the end (`ableton-mcp` → "Timing"). Watch half/double time
-on slow songs (60–90 BPM) — count along. `num_bars` should match
-`duration ÷ (beats_per_bar × beat)`; a large mismatch means rubato, a wrong tempo octave,
-or a wrong meter.
+**Sanity checks:** `tempo_drift_pct` above ~3% means one BPM misplaces notes by the end —
+place them through the beat grid (`ableton-mcp` → "Timing"). Watch half/double time on
+slow songs (60–90 BPM) — count along. A `num_bars` far from
+`duration ÷ (beats_per_bar × beat)` means rubato, a wrong tempo octave or a wrong meter.
 
-## Phase 2 — Stems
+## Phase 4 — Bass → MIDI
 
-```bash
-demucs -n htdemucs_ft -d mps -o stems <song.mp3>
-# → stems/htdemucs_ft/<song>/{bass,drums,vocals,other}.wav
-```
-
-- **`-d mps` on Apple Silicon** — demucs 4.0.1 otherwise runs on the CPU (M3, 30 s clip:
-  CPU 64.5 s, MPS 23.0 s). Meter-only runs need just `--two-stems=drums`.
-- **Check the cache first** (`du -sh ~/.cache/torch/hub/checkpoints` for 4.0.1; 4.1.x uses
-  the Hugging Face cache). `htdemucs_ft` is 4 × 84 MB; uncached, it downloads silently —
-  ~100 min at 3 MB/min once — and piping through `tail` hides all progress.
-- **Fast offline fallback:** `mlx-demucs` (plain htdemucs, not `_ft`; 28 s for a 4-minute
-  track). For `_ft` itself, torch with `-d mps` beat the MLX port (66 s vs 96 s on a
-  2-minute song, same output within ~22–29 dB). Call its venv binary directly — `uv run mlx-demucs` re-resolves dependencies and
-  hangs for 10+ minutes.
-- **Quality check:** listen to `bass.wav` alone — piano/guitar bleed means separation
-  struggled.
-
-## Phase 3 — Bass → MIDI
-
-**pyin** on `bass.wav` (code, cleanup rules and the octave cross-check are in the
+**pyin** on `$ST/bass.wav` (code, cleanup rules and the octave cross-check are in the
 `bass-transcribe` skill); basic-pitch only if the part is polyphonic. Then total each
 pitch class's sounding time per `(bar, cell)` → `analysis/bass_per_cell.json`.
 
@@ -134,21 +115,19 @@ for sharp keys — in F♯ minor a flat table writes the tonic `G♭m` and the d
 - **Bass enters late** in most songs: find the entry bar and ignore everything before it
   (stem bleed).
 
-## Phase 4 — Lyric timing (Whisper on the vocals stem)
+## Phase 5 — Lyric timing (Whisper on the vocals stem)
 
 ```bash
-<whisper-venv>/bin/python scripts/whisper_gated.py stems/<song>/vocals.wav \
-    [--language en] --out analysis/lyrics.json
+<whisper-venv>/bin/python scripts/whisper_gated.py $ST/vocals.wav [--language en] \
+    --out analysis/lyrics.json
 ```
 
-It gates Whisper on where the stem is actually sung (RMS → `clip_timestamps`: long-form
-lyric WER 22.9% → 20.7% and far fewer filler hallucinations, arXiv 2506.15514), sets
-large-v3-turbo's word-alignment heads, and drops words whose *whole* span is silent —
-Whisper often starts a sung word before the voice is audible, so filtering on start time
-cuts real words. Force `--language` when detection wobbles (chant, non-English). Then drop
-known hallucinations ("Thank you.", "Blah Blah", ".") and 3+ identical repeats. Skipping
-the gate and leaning on `no_speech_threshold=0.8` instead can return nothing for a track
-that has singing.
+Gates Whisper on where the stem is actually sung (RMS → `clip_timestamps`; long-form lyric
+WER 22.9% → 20.7% and far fewer filler hallucinations, arXiv 2506.15514), sets
+large-v3-turbo's word-alignment heads, and drops words whose *whole* span is silent
+(Whisper often starts a sung word before the voice is audible). Force `--language` when
+detection wobbles (chant, non-English). Then drop known hallucinations ("Thank you.",
+"Blah Blah", ".") and 3+ identical repeats.
 
 Map each word to a bar:
 
@@ -160,36 +139,35 @@ def locate(t, downbeats, beats_per_bar):     # from foundation.json — never as
     return None
 ```
 
-## Phase 5 — Sections (from lyrics + audio)
+## Phase 6 — Sections (from lyrics + audio)
 
 For each canonical lyric line, find its first bar via the word timings + `locate()`.
 Section boundaries = where each labelled section's first line lands. Automatic
 segmentation can *suggest* boundaries, never decide them: `as_seg` (barwise CBM, fed this
 song's own bars, `penalty_weight=0`) hit 80% of lyric-anchored boundaries within ±1 bar on
-one reference song but only 27% within ±0.5 s; the MLX port of all-in-one reached 43%.
+the one reference song with section truth, but only 27% within ±0.5 s.
 
-## Phase 5b — Chords (lv-chordia, cross-checked)
+## Phase 7 — Chords (lv-chordia, cross-checked)
 
 ```bash
-<venv>/bin/python scripts/chord_proposal.py --other stems/<song>/other.wav \
-    --bass stems/<song>/bass.wav --foundation analysis/foundation.json \
-    --bass-entry-bar <N> --out analysis/chord_proposal.json          # triad cross-check
+<venv>/bin/python scripts/chord_proposal.py --other $ST/other.wav --bass $ST/bass.wav \
+    --foundation analysis/foundation.json --bass-entry-bar <N> \
+    --out analysis/chord_proposal.json                           # triad cross-check
 <lv-venv>/bin/python scripts/lv_chords.py <song.mp3> --foundation analysis/foundation.json \
     --compare analysis/chord_proposal.json --out analysis/chords_lv.json
 ```
 
-**lv-chordia is the primary reading.** It names 7ths and inversions, which the triad
-method cannot, and beat it on all three benchmark songs — maj/min 91.5 → 96.3% and
-inversions 79.3 → 92.1% on one, 76 → 95% on another, and on a player-verified static
-Emaj7 it said `E:maj7` for 75% of cells where the triad method managed 0%. Run it on the
-**full mix** (a bass+other sum scored lower). ~5–12 s per song on CPU.
+**lv-chordia is the provisional primary reading** — it names 7ths and inversions, which
+the triad method can't, and led it on all three benchmark songs (two scored against
+another automatic tool, one against a player's ear; `references/chord-proposal.md`). Three
+songs is a small sample: it is weakest on rare qualities, and anything beyond 7ths
+(add9, ♯11) is untested — read those by ear. Run it on the **full mix**.
 
-**The triad method is the cross-check.** `chord_proposal.py` (bass-root constraint with
-slash relaxation, major bias **0**, flip count, per-cell margin) is independent evidence;
-`--compare` lists cells where the two disagree on the root — check those by ear with the
-Trap 1 tests. Details, benchmark and failure modes: `references/chord-proposal.md`.
+**The triad method is the independent cross-check** (bass-root constraint with slash
+relaxation, major bias **0**, flip count, per-cell margin). `--compare` lists cells where
+the two disagree on the root — check those by ear with the Trap 1 tests.
 
-## Phases 6–9 — Chart
+## Phase 8 — Chart
 
 Read `references/chart-and-lyrics.md` before building the chart. Core invariants:
 - One row per section; parallel sections get identical row splits.
@@ -245,13 +223,7 @@ declaring the chart done.
 6. Each chart correction touches ~3 places (chord dict, row layout, cascading lyrics).
 7. Mirror parallel sections visually; overlay section-boundary pickups in the same cell.
 
-## Local environment (this machine)
+## Local environment
 
-- Tooling root: `~/dev/abletonAI/audio-analysis/` — `.venv-bp/bin/python` (madmom,
-  librosa, basic-pitch, crepe, pretty_midi; runs this skill's scripts);
-  `.venv-demucs/bin/python` (demucs); `.venv-adtof` (ADTOF);
-  `mlx-demucs/.venv/bin/mlx-demucs` (batches).
-- **Whisper is not in any of those venvs:** `~/mlx-openai-whisper/bin/python`. Only
-  `mlx-community/whisper-large-v3-turbo` is cached.
-- Older helpers in the tooling root (`analyze_chords.py` etc.) predate this skill's
-  scripts — `analyze_chords.py` still has a 0.05 major bias. Prefer `scripts/`.
+Venvs, interpreters and cached models on this machine: `references/environment-setup.md`
+→ "This machine". Scripts here supersede the older helpers in the tooling root.

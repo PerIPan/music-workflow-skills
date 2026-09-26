@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 5b chord proposal: chroma + bass-root constraint with slash relaxation.
+"""Phase 7 cross-check: chroma + bass-root constraint with slash relaxation.
 
 One proposal per cell, where cells are the metric groups of each bar (the
 `grouping` in foundation.json: 4/4 -> [2, 2], 11/8 as 6+5 -> [6, 5]). Scores
@@ -12,8 +12,8 @@ MAJOR_BIAS defaults to 0 and is never gated on the key. A second pass at
 count means near-ties, so say the quality call is uncertain.
 
 Usage (analysis venv; needs numpy + librosa):
-    <venv>/bin/python chord_proposal.py --other stems/<song>/other.wav \
-        --bass stems/<song>/bass.wav --foundation analysis/foundation.json \
+    <venv>/bin/python chord_proposal.py --other stems/htdemucs_ft/<song>/other.wav \
+        --bass stems/htdemucs_ft/<song>/bass.wav --foundation analysis/foundation.json \
         [--grouping 6,5] [--bass-entry-bar 5] [--out analysis/chord_proposal.json]
 """
 import argparse, json, sys
@@ -40,19 +40,13 @@ def templates():
     return out
 
 
-def spelling_for(key):
-    """Sharp names in sharp keys, flat names otherwise. key: 'F# minor', 'Em', 'E', or
-    madmom's top-2 list [['F# minor', 0.61], ...]."""
-    if isinstance(key, list) and key:
-        key = key[0][0] if isinstance(key[0], (list, tuple)) else key[0]
-    if not key:
+def spelling_for(key_top2):
+    """Sharp names in sharp keys, flat names otherwise. key_top2 as foundation.py writes it:
+    [["F# minor", 0.61], ["A major", 0.2]] - the top entry decides."""
+    if not key_top2:
         return PC_FLAT
-    k = str(key).strip()
-    if " " not in k and k.endswith("m"):
-        tonic, minor = k[:-1], True
-    else:
-        tonic, minor = k.split()[0], "minor" in k.lower()
-    return PC_SHARP if tonic in (SHARP_MINOR if minor else SHARP_MAJOR) else PC_FLAT
+    tonic, mode = key_top2[0][0].split()
+    return PC_SHARP if tonic in (SHARP_MINOR if mode == "minor" else SHARP_MAJOR) else PC_FLAT
 
 
 def cells_of(downbeats, grouping):
@@ -102,7 +96,7 @@ def main():
         sys.exit("No grouping. Run detect_meter.py first and set foundation.json "
                  "'grouping' (4/4 -> [2, 2]) or pass --grouping. Never assume 4/4.")
     downbeats = F["downbeat_times"]
-    PC = spelling_for(F.get("key") or F.get("key_top2"))
+    PC = spelling_for(F.get("key_top2"))
     T = templates()
 
     y, _ = librosa.load(a.other, sr=SR, mono=True)

@@ -130,7 +130,7 @@ drone, where the disagreements also include harmonic locks, not just octaves.
    in parallel).
 3. **Tab / chart** — bass tab or bar chart generation: chart craft lives in the
    `song-analysis` skill (`references/chart-and-lyrics.md`); pitch-class per half-bar
-   aggregation as in its Phase 3.
+   aggregation as in its Phase 4.
 
 ## 5. Verify before declaring done
 
@@ -140,9 +140,8 @@ take yields roughly 1–4 notes/second; a pitch histogram dominated by 2–5 pit
 wildly fewer → gate too high, the take is quieter than expected, or the part is a drone
 (few long notes is a legitimate answer).
 
-## Local environment (this machine)
+## Local environment
 
-- Python with librosa + crepe 0.0.16 + basic-pitch 0.4.0 + pretty_midi:
-  `~/dev/abletonAI/audio-analysis/.venv-bp/bin/python`
-- Prior art: `scripts/transcribe_bass_pyin.py` in the tooling root — the pyin pipeline
-  above, outputting beat-based JSON for Live.
+Run with the analysis interpreter listed in the `song-analysis` skill's
+`references/environment-setup.md` → "This machine" (librosa, crepe, basic-pitch,
+pretty_midi).

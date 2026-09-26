@@ -1,6 +1,6 @@
 ---
 name: song-to-ableton
-description: Use when an existing song should be analysed and then rebuilt, covered or reinterpreted in Ableton Live end to end, or when it is unclear whether the user wants the analysis, the Live build, or both.
+description: Use when the user wants an existing song rebuilt, covered or reinterpreted in Ableton Live — analysis feeding a Live build, end to end. For analysis alone use song-analysis; for a take the user played, bass-transcribe.
 ---
 
 # Song → Ableton (end-to-end orchestrator)
@@ -46,9 +46,10 @@ energy in Ableton. Analysis says *what the song is*; the build decides *how it s
 ## Quickstart
 
 1. Drop `<song>.mp3` + `lyrics.txt` in a song folder.
-2. Run the `song-analysis` pipeline: stems (htdemucs_ft) → pulse + key → **meter sweep
-   (`detect_meter.py`; never assume 4/4)** → bass via pyin → chords via chroma+bass-root
-   → Whisper on the vocals stem.
+2. Run the `song-analysis` pipeline: pulse + key (`foundation.py pulse`) → stems
+   (`htdemucs_ft`) → **meter sweep, then `foundation.py meter` (never assume 4/4 — answer
+   its questions with the user)** → bass via pyin → lyrics (`whisper_gated.py`) → chords
+   (`lv_chords.py`, cross-checked by `chord_proposal.py`).
 3. Open Ableton; verify the MCP connection (`health_check` — see `ableton-mcp`).
 4. Build, e.g.: "At <BPM> in <key>, build a Session scene with these chords per bar
    <chord_proposal>, a drum pattern matching <kick/snare logic>, and leave the bass slot
@@ -62,9 +63,8 @@ energy in Ableton. Analysis says *what the song is*; the build decides *how it s
 - Can't connect / tools missing / device errors → `ableton-mcp`
   references/troubleshooting.md.
 
-## Local environment (this machine)
+## Local environment
 
-- Analysis tooling + venvs: `~/dev/abletonAI/audio-analysis/`
-  (`.venv-bp`, `.venv-demucs`); song folders live next to it in
-  `~/dev/abletonAI/`.
-- Ableton MCP configured via that project's `.mcp.json`.
+Interpreters and song folders: the `song-analysis` skill's
+`references/environment-setup.md` → "This machine". Live connection: the `ableton-mcp`
+skill.

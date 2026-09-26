@@ -37,6 +37,7 @@ Machine-specific paths are isolated in a "Local environment (this machine)" sect
 skill (written against `~`) — everything else is generic.
 
 Scripts:
+- `song-analysis/scripts/foundation.py` — pulse + key, then the meter fields; asks instead of guessing
 - `song-analysis/scripts/detect_meter.py` — meter by sweeping every cycle 2–25 (odd meters)
 - `song-analysis/scripts/lv_chords.py` — chords with 7ths/inversions (lv-chordia) on the bar/cell grid
 - `song-analysis/scripts/chord_proposal.py` — triad cross-check: slash relaxation, flip count
@@ -48,6 +49,7 @@ Tests run offline on synthetic audio or a mock Live socket:
 ```bash
 <analysis-venv>/bin/python song-analysis/tests/test_detect_meter.py
 <analysis-venv>/bin/python song-analysis/tests/test_chord_proposal.py
+python3 song-analysis/tests/test_foundation.py
 python3 ableton-mcp/tests/test_push_notes.py
 ```
 

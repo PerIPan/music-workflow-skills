@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 5b primary: large-vocabulary chord recognition (lv-chordia) snapped to cells.
+"""Phase 7 primary: large-vocabulary chord recognition (lv-chordia) snapped to cells.
 
 Runs lv-chordia (ISMIR 2019 large-vocabulary model: 7ths, inversions, sus) on the
 full mix and assigns each (bar, cell) the chord that covers most of it. Cells

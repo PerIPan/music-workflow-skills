@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Phase 4: lyric word timing with mlx-whisper, gated on where the vocal stem is sung.
+"""Phase 5: lyric word timing with mlx-whisper, gated on where the vocal stem is sung.
 
 An RMS gate on the separated vocal stem becomes Whisper's clip_timestamps, so it
 never transcribes silence (cut long-form lyric WER 22.9% -> 20.7% and most filler
@@ -8,7 +8,7 @@ curated word-alignment heads, which mlx-whisper does not set itself, and drops
 words whose whole span lies outside the gate.
 
 Usage (the Whisper venv; Apple Silicon, needs mlx-whisper + librosa):
-    <whisper-venv>/bin/python whisper_gated.py stems/<song>/vocals.wav \
+    <whisper-venv>/bin/python whisper_gated.py stems/htdemucs_ft/<song>/vocals.wav \
         [--language en] [--gate 0.1] [--out analysis/lyrics.json]
 """
 import argparse, json

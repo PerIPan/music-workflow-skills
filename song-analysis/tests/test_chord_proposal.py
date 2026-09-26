@@ -41,7 +41,7 @@ def main():
         o, b, f, out = (Path(d) / n for n in ("other.wav", "bass.wav", "f.json", "o.json"))
         sf.write(o, other, SR); sf.write(b, bass, SR)
         json.dump({"downbeat_times": [i * BAR for i in range(len(PROG) + 1)],
-                   "grouping": [2, 2], "key": "A minor"}, open(f, "w"))
+                   "grouping": [2, 2], "key_top2": [["A minor", 0.8]]}, open(f, "w"))
         r = subprocess.run([sys.executable, str(SCRIPT), "--other", str(o), "--bass", str(b),
                             "--foundation", str(f), "--out", str(out)],
                            capture_output=True, text=True)

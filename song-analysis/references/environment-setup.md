@@ -53,9 +53,9 @@ Notes:
 - **mlx-demucs** (optional batch path) runs **plain htdemucs** (not `_ft`) ~9× faster than
   torch-CPU demucs; for `_ft`, pass `-d mps` to torch demucs instead (~2.8× faster than
   CPU).
-- Smoke tests: `.venv-bp/bin/python tests/test_detect_meter.py` and
-  `tests/test_chord_proposal.py` (in `song-analysis/`), `python tests/test_push_notes.py`
-  (in `ableton-mcp/`).
+- Tests (offline, synthetic): in `song-analysis/`, `.venv-bp/bin/python
+  tests/test_detect_meter.py` and `tests/test_chord_proposal.py`, `python3
+  tests/test_foundation.py`; in `ableton-mcp/`, `python3 tests/test_push_notes.py`.
 
 ## Per-song working directory
 
@@ -67,14 +67,33 @@ Created fresh for each song:
 ├── lyrics.txt                          # input (canonical text)
 ├── PLAN.md                             # decisions log
 ├── analysis/
-│   ├── foundation.json                 # pulse, meter, grouping, downbeats, key, bar_bpm
+│   ├── foundation.json                 # foundation.py: pulse + key, then meter fields
 │   ├── meter.json                      # detect_meter.py --json
-│   ├── lyrics.json                     # whisper_gated.py words
-│   ├── bass.mid                        # bass transcription
+│   ├── bass.mid                        # bass transcription (pyin)
 │   ├── bass_per_cell.json              # per (bar, cell) pitch classes
-│   └── chord_proposal.json             # chord_proposal.py
+│   ├── lyrics.json                     # whisper_gated.py words
+│   ├── chords_lv.json                  # lv_chords.py — primary chord reading
+│   └── chord_proposal.json             # chord_proposal.py — triad cross-check
 ├── stems/htdemucs_ft/<song>/           # {bass,drums,vocals,other}.wav
 └── gen_v<N>.py                         # chart generator (iterate)
 ```
 
 Final chart HTML can be written anywhere convenient (e.g. a shared cloud-storage folder).
+
+## This machine
+
+The one place for local paths — every skill in this repo points here.
+
+| Role | Interpreter / binary |
+|---|---|
+| Analysis (madmom, librosa, basic-pitch, crepe; runs `scripts/*.py`) | `~/dev/abletonAI/audio-analysis/.venv-bp/bin/python` |
+| Stems (demucs 4.0.1, torch 2.4.1) | `~/dev/abletonAI/audio-analysis/.venv-demucs/bin/python -m demucs` |
+| Chords (lv-chordia) | `~/dev/abletonAI/audio-analysis/.venv-lvchordia/bin/python` |
+| Lyrics (mlx-whisper; only `whisper-large-v3-turbo` is cached) | `~/mlx-openai-whisper/bin/python` |
+| Drums (ADTOF, optional) | `~/dev/abletonAI/audio-analysis/.venv-adtof/bin/python` |
+| Batch stems (plain htdemucs, MLX) | `~/dev/abletonAI/audio-analysis/mlx-demucs/.venv/bin/mlx-demucs` |
+| Trial venvs kept for re-runs | `.venv-asseg` (sections), `.venv-swiftf0`, `.venv-sep047` (+ `models-audio-separator/`) |
+
+Song folders live in `~/dev/abletonAI/`. Older helpers in the tooling root
+(`analyze_chords.py`, `scripts/transcribe_bass_pyin.py`, `gen_*.py`) predate these skills'
+scripts — `analyze_chords.py` still has a 0.05 major bias; prefer `scripts/`.

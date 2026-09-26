@@ -1,6 +1,6 @@
 # Chart structure, lyric placement, and HTML output
 
-Read this when producing the chord+lyric chart (Phases 6–9 of the song-analysis skill).
+Read this when producing the chord+lyric chart (Phase 8 of the song-analysis skill).
 
 ## Chart structure
 

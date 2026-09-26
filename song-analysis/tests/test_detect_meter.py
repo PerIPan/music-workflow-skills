@@ -15,14 +15,14 @@ import soundfile as sf
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "detect_meter.py"
 SR, PULSE = 22050, 0.4                                  # 150 BPM pulse
-CASES = [  # name, grouping (None = no accent), accepted cycles (None = INCONCLUSIVE)
-    ("4/4", [2, 2], {2, 4}),        # duple: the bar-level accent is too faint to insist on 4
-    ("3/4", [3], {3}),
-    ("6/8 as 3+3", [3, 3], {3, 6}),
-    ("5/4 as 3+2", [3, 2], {5}),
-    ("7/8 as 2+2+3", [2, 2, 3], {7}),
-    ("11/8 as 6+5", [6, 5], {11}),
-    ("flat pulse", None, {None}),
+CASES = [  # name, rendered grouping (None = no accent), accepted cycles, expected grouping
+    ("4/4", [2, 2], {2, 4}, None),  # duple: the bar-level accent is too faint to insist on 4
+    ("3/4", [3], {3}, [3]),
+    ("6/8 as 3+3", [3, 3], {3, 6}, None),
+    ("5/4 as 3+2", [3, 2], {5}, [3, 2]),
+    ("7/8 as 2+2+3", [2, 2, 3], {7}, None),   # only the main split is detected
+    ("11/8 as 6+5", [6, 5], {11}, [6, 5]),
+    ("flat pulse", None, {None}, None),
 ]
 
 
@@ -48,7 +48,7 @@ def render(grouping, n_pulses=176):
 def main():
     fails = 0
     with tempfile.TemporaryDirectory() as d:
-        for name, grouping, want in CASES:
+        for name, grouping, want, want_g in CASES:
             y, beats = render(grouping)
             wav, fj, out = (Path(d) / f for f in ("x.wav", "f.json", "o.json"))
             sf.write(wav, y, SR)
@@ -59,10 +59,12 @@ def main():
             cons = json.load(open(out))["consensus"]
             got = cons["cycle"] if cons else None
             ok = got in want and (cons is None or cons["downbeat_pulse"] == 0)  # beat 1 = pulse 0
+            if want_g is not None:
+                ok = ok and cons["grouping"] == want_g
             fails += not ok
             print(f"{'PASS' if ok else 'FAIL'}  {name:14s} want {sorted(want, key=str)}  got {got}"
                   + (f"  ({cons['confidence']}, {cons['margin']}x, downbeat pulse "
-                     f"{cons['downbeat_pulse']})" if cons else ""))
+                     f"{cons['downbeat_pulse']}, grouping {cons['grouping']})" if cons else ""))
     sys.exit(1 if fails else 0)
 
 

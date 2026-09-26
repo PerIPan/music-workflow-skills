@@ -1,6 +1,6 @@
 # Meter detection — how the sweep works and how to read it
 
-Read this when running `scripts/detect_meter.py` (Phase 1b), when its answer surprises
+Read this when running `scripts/detect_meter.py` (Phase 3), when its answer surprises
 you, or before telling anyone a song has "no time signature".
 
 ## Why a sweep
@@ -26,12 +26,26 @@ position ÷ quietest. Then, per band:
   it falls back to the bass stem (30–250 Hz) and the harmonic stem (80–2000 Hz): plenty of
   songs have no kit, or a percussion part that is an undifferentiated pulse, and the cycle
   lives in the bass and the harmony instead.
-- **Downbeat** = the strongest position of the fundamental's profile, reported as a pulse
-  index: `downbeat_times = beat_times[downbeat_pulse::cycle]`.
+- **Downbeat and grouping** come from one *anchor* band — the kick when it voted (beat 1
+  is counted with the kick), else the band with the widest margin. Downbeat = its
+  strongest position; the main split = where its second-strongest accent falls (an 11
+  with those accents 6 pulses apart is 6+5). Common meters use the convention instead
+  (4 → 2+2, 6 → 3+3, 3 → one cell). Only the main split is found — a finer aksak grouping
+  (7 as 2+2+3) needs the ear. When the two accents are within 10%, either could be beat
+  1: the consensus carries an `alternative` (the other downbeat and the reversed split).
 
-`--json` writes every band's sweep, per-band verdicts (cycle, margin, accented positions,
-downbeat pulse) and the consensus. Needs librosa, plus madmom unless `--foundation`
-supplies the beat grid.
+`--json` output:
+- `consensus` — `cycle`, `confidence`, `margin`, `bands_agree`/`bands_tested`,
+  `anchor_band`, `downbeat_pulse`, `grouping`, `grouping_source` (accents | convention),
+  and `alternative` when beat 1 is ambiguous; `null` when INCONCLUSIVE.
+- `verdicts[<band>]` — per band: `cycle`, `margin`, `accented` (1-indexed positions above
+  the mean), `downbeat_pulse`. Accented positions live here, not in the consensus.
+- `bands[<band>]` — the full sweep (profile and phase for every period).
+
+Then `scripts/foundation.py meter` turns the consensus into the foundation fields
+(`downbeat_times = beat_times[downbeat_pulse::cycle]`, bar tempo, drift, Live tempo) —
+and stops with a question for the user whenever the sweep leaves a real choice open.
+Needs librosa, plus madmom unless `--foundation` supplies the beat grid.
 
 ## Reading the output
 
@@ -44,7 +58,9 @@ supplies the beat grid.
 | Winner is prime (7, 11, 13) | Cannot be a phrase of anything smaller | Almost certainly the meter |
 
 **The two strongest positions in an odd cycle mark its internal split** — that is the
-`grouping`. An 11 with peaks at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7.
+`grouping`. An 11 with peaks at 1 and 7 is 6+5; peaks at 1 and 5 would be 4+7. On a
+player-verified 11/8 the two kick accents differed by only 3%, so the sweep offered 5+6
+and 6+5 — the player's count picked 6+5.
 
 **The sweep can only find cycles on the pulse grid you hand it.** If the tempogram peaks
 at twice the tracked pulse, the tracker is reading half-time: re-run on the doubled grid,
@@ -84,4 +100,6 @@ come in.
 ## Tests
 
 `<venv>/bin/python tests/test_detect_meter.py` — synthetic clicks in 4/4, 3/4, 6/8, 5/4,
-7/8, 11/8 and a flat pulse; checks cycle and downbeat. ~8 s, no madmom needed.
+7/8, 11/8 and a flat pulse; checks cycle, downbeat and grouping. ~8 s, no madmom needed.
+`python3 tests/test_foundation.py` — the meter step's questions (INCONCLUSIVE, phrase,
+ambiguous beat 1, pulse unit) and its bar tempo / drift / Live tempo.

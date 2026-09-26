@@ -35,6 +35,31 @@ FALLBACK = {"bass": (30, 250), "harmonic": (80, 2000)}
 # reference songs, real cycles measured 2.0-17x; drumless or kit-less material sat
 # at 1.0-1.25x (every fold alike). Calibrated on that small set — revisit with more.
 MIN_MARGIN = 1.3
+# Cells for common meters follow convention; odd cycles are split at their accents.
+CONVENTION = {2: [2], 3: [3], 4: [2, 2], 6: [3, 3], 9: [3, 3, 3], 12: [3, 3, 3, 3]}
+
+
+def grouping_from(rows, P):
+    """Downbeat + main split of cycle P from one band's sweep rows.
+
+    Downbeat = strongest position. Split = where the second-strongest accent falls
+    (an 11 with accents 6 pulses apart is 6+5). Only the main split is found - a
+    finer aksak grouping (2+2+3) needs the ear. When the two accents are within 10%,
+    either could be beat 1: returns the alternative too.
+    """
+    r = next(x for x in rows if x["period"] == P)
+    prof, ph = np.asarray(r["profile"]), r["phase"]
+    order = np.argsort(prof)[::-1]
+    p1, p2 = int(order[0]), int(order[1])
+    down = (ph + p1) % P
+    if P in CONVENTION:
+        return dict(grouping=CONVENTION[P], downbeat_pulse=down, grouping_source="convention")
+    d = (p2 - p1) % P
+    grouping = [d, P - d] if min(d, P - d) >= 2 else [P]
+    out = dict(grouping=grouping, downbeat_pulse=down, grouping_source="accents")
+    if prof[p2] >= 0.9 * prof[p1] and len(grouping) == 2:
+        out["alternative"] = dict(grouping=grouping[::-1], downbeat_pulse=(ph + p2) % P)
+    return out
 
 
 def pulse_grid(audio_path, foundation=None):
@@ -196,12 +221,20 @@ def main():
         print(f"  cycle = {agree} x {beat*1000:.0f} ms = {agree*beat:.2f} s")
         print(f"  -> ~{(bt[-1]-bt[0])/(agree*beat):.0f} bars across the tracked span")
         mg = float(np.median(margins))
-        best = max((v for v in verdicts.values() if v and v["cycle"] == agree),
-                   key=lambda v: v["margin"])
+        # beat 1 is counted with the kick: anchor on it when it voted for this cycle
+        voters = [k for k, v in verdicts.items() if v and v["cycle"] == agree]
+        anchor = "kick" if "kick" in voters else max(voters, key=lambda k: verdicts[k]["margin"])
+        g = grouping_from(out[anchor], agree)
         consensus = dict(cycle=agree, bands_agree=n, bands_tested=tested,
                          margin=round(mg, 2), confidence="HIGH" if mg >= 2.0 else "LOW",
-                         downbeat_pulse=best["downbeat_pulse"])
-        print(f"  downbeat: pulse {best['downbeat_pulse']} of the grid (strongest position)")
+                         anchor_band=anchor, **g)
+        print(f"  downbeat: pulse {g['downbeat_pulse']} of the grid ({anchor} band); "
+              f"grouping {'+'.join(map(str, g['grouping']))} ({g['grouping_source']})")
+        if "alternative" in g:
+            alt = g["alternative"]
+            print(f"  AMBIGUOUS: the two strongest {anchor} accents are within 10% - beat 1 may")
+            print(f"    be pulse {alt['downbeat_pulse']} instead, giving "
+                  f"{'+'.join(map(str, alt['grouping']))}. Ask the user which hit is '1'.")
         if mg >= 2.0:
             print(f"  confidence HIGH: {mg:.1f}x clear of unrelated periods.")
         else:

@@ -1,7 +1,8 @@
 # Chord proposal — lv-chordia first, the triad method as cross-check
 
-Read this when tuning Phase 5b, when its output looks wrong, or before quoting its
-accuracy to anyone.
+Read this when tuning Phase 7, when its output looks wrong, or before quoting its
+accuracy to anyone. lv-chordia is the *provisional* primary: three songs, two of them
+scored against another automatic tool.
 
 ## Benchmark (2026-09-26, per cell, mir_eval)
 
